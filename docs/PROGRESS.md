@@ -28,8 +28,8 @@
 
 ### v2 品质升级（2026-09-22 用户提出四条红线，见 spec §9）
 - 计划：`docs/superpowers/plans/2026-09-22-expiry-keeper-v2-quality.md`（Task 1–13）
-- [ ] T1 git 纳管+CODESTYLE　[ ] T2 包分层搬移　[ ] T3 Room v2 迁移　[ ] T4 引擎 v2　[ ] T5 LWW 合并
-- [ ] T6 备份/恢复　[ ] T7 设计系统　[ ] T8 今日 v2　[ ] T9 清单 v2　[ ] T10 添加 v2
+- [x] T1 git 纳管+CODESTYLE　[x] T2 包分层搬移　[x] T3 Room v2 迁移　[x] T4 引擎 v2　[x] T5 LWW 合并
+- [x] T6 备份/恢复　[x] T7 设计系统　[x] T8 今日 v2　[x] T9 清单 v2　[x] T10 添加 v2
 - [ ] T11 详情+设置　[ ] T12 通知 v2　[ ] T13 全面体检
 
 ### M2 品类完备
