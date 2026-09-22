@@ -49,14 +49,14 @@ object ReminderEngine {
             item.reminderOffsetsDays.any { off -> daysLeft == off.toLong() } -> DueStatus.DUE_SOON
             else -> return null
         }
-        return Reminder(item, status, daysLeft.coerceAtLeast(0), (-daysLeft).coerceAtLeast(0), notifId(item.id, status, today))
+        return Reminder(item, status, daysLeft.coerceAtLeast(0), (-daysLeft).coerceAtLeast(0), notifIdFor(item.id, status, today))
     }
 
     private fun consumable(item: Item): Reminder? {
         val qty = item.quantity ?: return null
         val threshold = item.lowStockThreshold ?: return null
         if (qty > threshold) return null
-        return Reminder(item, DueStatus.LOW_STOCK, null, 0, notifId(item.id, DueStatus.LOW_STOCK, null))
+        return Reminder(item, DueStatus.LOW_STOCK, null, 0, notifIdFor(item.id, DueStatus.LOW_STOCK, null))
     }
 
     private fun recurring(item: Item, today: LocalDate): Reminder? {
@@ -67,7 +67,7 @@ object ReminderEngine {
             daysLeft in 1..7 && item.reminderOffsetsDays.any { off -> daysLeft == off.toLong() } -> DueStatus.RENEWAL_SOON
             else -> return null
         }
-        return Reminder(item, status, daysLeft, 0, notifId(item.id, status, today))
+        return Reminder(item, status, daysLeft, 0, notifIdFor(item.id, status, today))
     }
 
     /** 今日 + 未来 withinDays 内的到期摘要（"今日"屏排序用） */
@@ -75,7 +75,8 @@ object ReminderEngine {
         items.filter { it.deletedAt == null }
             .mapNotNull { item ->
                 val epoch = when (item.reminderKind) {
-                    ReminderKind.EXPIRY -> item.expireAtEpochDay
+                    // Task 4 carry-over：EXPIRY 走派生到期日（开封+保质期），不能只读 raw 字段
+                    ReminderKind.EXPIRY -> effectiveExpireDay(item)
                     ReminderKind.RECURRING -> item.nextDueAtEpochDay
                     ReminderKind.CONSUMABLE -> null
                 } ?: return@mapNotNull null
@@ -84,6 +85,7 @@ object ReminderEngine {
             .filter { it.second <= withinDays }
             .sortedBy { it.second }
 
-    private fun notifId(itemId: String, status: DueStatus, date: LocalDate?): Int =
+    /** 通知 id 纯函数：UI 取消既有通知与引擎发通知共用同一算法，LOW_STOCK 传 date=null */
+    fun notifIdFor(itemId: String, status: DueStatus, date: LocalDate?): Int =
         "$itemId|${status.name}|${date?.toEpochDay() ?: "static"}".hashCode() and 0x7FFFFFFF
 }

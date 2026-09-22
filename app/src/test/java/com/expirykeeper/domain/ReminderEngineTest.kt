@@ -73,6 +73,16 @@ class ReminderEngineTest {
         assertEquals(listOf(1L, 10L), list.map { it.second })
     }
 
+    @Test fun upcomingHonorsDerivedExpireDate() {
+        val opened = today.minusDays(5).toEpochDay()
+        val item = expiryItem(0, listOf(0)).copy(
+            expireAtEpochDay = null, openedAtEpochDay = opened, shelfLifeDays = 6,
+        )
+        val list = ReminderEngine.upcoming(listOf(item), today)
+        assertEquals(1, list.size)
+        assertEquals(1L, list[0].second)
+    }
+
     @Test fun `notification ids stable per day unique per status`() {
         val a = ReminderEngine.computeOne(expiryItem(0, listOf(0)), today)!!
         val b = ReminderEngine.computeOne(expiryItem(0, listOf(0)), today)!!
