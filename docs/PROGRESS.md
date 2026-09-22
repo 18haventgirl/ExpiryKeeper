@@ -36,12 +36,22 @@
 #### v2 验收记录（2026-09-22，Task 13 收尾）
 - 设备：emulator-5554 · Pixel 9 (AVD) · Android 17 / API 37
 - 静态：`lintDebug` **0 error**（1 个 NewApi error 已修：`canScheduleExactAlarms` 加 API 31 版本守卫）；16 warning + 1 hint 全部为低级/依赖版本类，逐条判断见 `task-13-report.md`，暂不改动
-- 单测：`testDebugUnitTest` **29/29 绿**（ReminderEngine 14 / ExpiryForm 6 / SyncMerge 6 / Backup 3）
+- 单测：`testDebugUnitTest` **32/32 绿**（ReminderEngine 14 / ExpiryForm 5 / SyncMerge 7 / Backup 6）
 - 迁移（红线1 直接证据）：`connectedDebugAndroidTest` → `RoomMigrationTest.migrate1To2KeepsData` **通过**（v1 数据迁入 v2 新列、events 表建好、断言未删）。为跑通补了两处测试依赖修复：`androidx.test:runner` 缺失、`kotlinx-serialization` core/json 版本分裂（androidTest 强制对齐 1.8.1）
 - 冷启动冒烟：`install -r` → force-stop → 冷启 → `topResumedActivity=com.expirykeeper/.MainActivity`，进程存活无崩溃；间隔 30s 两次 screencap 均为 1080×2424 非黑屏、渲染今日 v2 真实界面
 - 泄漏粗检：`dumpsys meminfo` 两次采样（中间一次 HOME→重开切应用）TOTAL PSS ≈113MB、Native Heap 13.1→13.5MB（增幅 <20%），无增长趋势
-- 已知遗留 minor：分散记录在各 fix/feat 提交信息中（见 git log），M2 条码、M3 同步仍为未来里程碑
-- 人工验收清单（脚本无法覆盖的 UI 手测项）见 `task-13-report.md` 末尾表格，交由人类伙伴逐项确认
+- 全分支终审（v2 收尾）：review 38df8b9..1b1e106 → 修复波 093a1c0（13 文件）：importMerged 墓碑可见（防删除复活）、Backup.parse 严格化（缺时间戳/非法枚举/负值一律拒绝，+3 拒绝测试）、通知残留清扫、撤销 Snackbar replay=1、两周计数排除逾期、跨类型字段清理、续费周期内联校验、死代码清扫、snooze 边界修正、MigrationTest 改 JUnit 断言；复审判定 ADDRESSED
+- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ 备份不携带墓碑 → 恢复不复活删除，M3 WebDAV 同步需导出墓碑；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）。M2 条码、M3 同步仍为未来里程碑
+- 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
+
+| 项 | 来源 | 手测步骤 | 通过标准 |
+|---|---|---|---|
+| 备份/恢复 | T6 | 设置→导出到「下载」→改一条数据→导入该文件 | Toast 成功且数据按 LWW 回滚正确 |
+| 今日屏快速操作 | T8 | 造 3 条（明天到期/已过期/低库存）→点「今天不再提醒」/「稍后3天」/「续期」 | 分组与 DueRing 数字正确；处理/延后即时消失且重进不现；续期后到期日=today+shelfLife；暗色全页可读 |
+| 清单搜索排序分组 | T9 | 搜「牛奶」实时过滤/清空恢复；切 4 种排序；看分组计数 | 无到期日者沉底；分组计数与明细一致；~30 条无 jank |
+| 添加三步 & emoji | T10 | 「牛奶，开封 3 天」零键盘路径；自定义 🐠 保存；空名/双空规则校验；编辑 M1 旧数据 | ≤15 秒完成；emoji 在今日/清单/详情/通知标题均显示；非法输入按钮禁用且提示明确；旧数据不丢字段不崩 |
+| 详情/设置/撤销 | T11 | 长按→详情浮层；删除→Snackbar 撤销；权限卡两行；动态色开关；概览计数 | 详情数据正确；撤销后物品回归且到期日不变；权限状态真实反映；开关即时变色/回落 teal；概览与清点一致 |
+| 通知聚合与延后 | T12 | 造 4 条到期→看通知栏分组摘要→点「稍后 3 天」 | 聚合成组、点开列表正确；延后后该通知消失且今日屏同步消失 |
 
 ### M2 品类完备
 - [ ] CONSUMABLE / RECURRING 语义 + 品类模板与保质期常识库
