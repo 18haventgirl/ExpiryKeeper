@@ -47,7 +47,7 @@ import java.time.LocalDate
 /** 清单 v2：搜索 + 4 路排序 + 品类分组（非吸顶头）；删除入口已移至详情屏（Task 11） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ListScreen(vm: ItemsViewModel, onEdit: (String) -> Unit) {
+fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     val visible by vm.visibleItems.collectAsStateWithLifecycle()
     val query by vm.filterQuery.collectAsStateWithLifecycle()
     val sort by vm.sortOrder.collectAsStateWithLifecycle()
@@ -109,12 +109,12 @@ fun ListScreen(vm: ItemsViewModel, onEdit: (String) -> Unit) {
                 groupedCategories(visible).forEach { (rawId, cat, list) ->
                     item(key = "group-$rawId") { SectionHeader("${cat.emoji} ${cat.name}", list.size) }
                     items(list, key = { it.id }) { item ->
-                        ListRow(item = item, onEdit = onEdit, today = today)
+                        ListRow(item = item, onDetail = onDetail, today = today)
                     }
                 }
             } else {
                 items(visible, key = { it.id }) { item ->
-                    ListRow(item = item, onEdit = onEdit, today = today)
+                    ListRow(item = item, onDetail = onDetail, today = today)
                 }
             }
         }
@@ -134,9 +134,9 @@ private fun groupedCategories(
     return known + unknown
 }
 
-/** 单行卡：状态胶囊（有提醒）或数量文本（无提醒）；点击/长按 → 编辑（Task 11 换详情） */
+/** 单行卡：状态胶囊（有提醒）或数量文本（无提醒）；点击/长按 → 详情浮层（Task 11） */
 @Composable
-private fun ListRow(item: Item, onEdit: (String) -> Unit, today: LocalDate) {
+private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
     val cat = Categories.default(item.categoryId)
     val reminder = ReminderEngine.computeOne(item, today)
     ItemCard(
@@ -147,8 +147,8 @@ private fun ListRow(item: Item, onEdit: (String) -> Unit, today: LocalDate) {
         } else {
             Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         },
-        onClick = { onEdit(item.id) },
-        onLongClick = { onEdit(item.id) },
+        onClick = { onDetail(item.id) },
+        onLongClick = { onDetail(item.id) },
     ) {
         if (reminder != null) {
             StatusPill(reminder.status, reminder.status.label)

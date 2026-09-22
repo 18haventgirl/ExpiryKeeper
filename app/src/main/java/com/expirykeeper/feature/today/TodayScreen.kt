@@ -46,7 +46,7 @@ import java.util.Locale
 @Composable
 fun TodayScreen(
     vm: ItemsViewModel,
-    onEdit: (String) -> Unit,
+    onDetail: (String) -> Unit,
     onSettings: () -> Unit = {},
 ) {
     val items by vm.items.collectAsStateWithLifecycle()
@@ -84,19 +84,19 @@ fun TodayScreen(
         if (urgent.isNotEmpty()) {
             item { SectionHeader("紧急", urgent.size) }
             items(urgent, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = true, modifier = Modifier.animateItem())
+                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = true, modifier = Modifier.animateItem())
             }
         }
         if (soon.isNotEmpty()) {
             item { SectionHeader("即将到期", soon.size) }
             items(soon, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = false, modifier = Modifier.animateItem())
+                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
             }
         }
         if (attention.isNotEmpty()) {
             item { SectionHeader("需要关注", attention.size) }
             items(attention, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = false, modifier = Modifier.animateItem())
+                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
             }
         }
         item { Spacer(Modifier.width(1.dp).padding(bottom = 12.dp)) }
@@ -148,7 +148,7 @@ private fun HeroStat(value: String, label: String) {
 private fun ReminderCard(
     r: Reminder,
     vm: ItemsViewModel,
-    onEdit: (String) -> Unit,
+    onDetail: (String) -> Unit,
     showActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -159,8 +159,8 @@ private fun ReminderCard(
             item = item,
             icon = ReminderEngine.displayIcon(item, cat.emoji),
             tone = StatusTone(r.status),
-            onClick = { onEdit(item.id) },
-            onLongClick = { onEdit(item.id) },
+            onClick = { onDetail(item.id) },
+            onLongClick = { onDetail(item.id) },
         ) {
             DueRing(daysLeft = if (r.status == DueStatus.LOW_STOCK) null else r.daysLeft)
         }

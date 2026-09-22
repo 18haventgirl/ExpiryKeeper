@@ -17,11 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -76,7 +74,6 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
     var recurrenceCustom by remember { mutableStateOf(false) }
     var recurrenceText by remember { mutableStateOf("") }
     var moreOpen by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(itemId == null) }
 
     LaunchedEffect(itemId) {
@@ -278,9 +275,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
                 modifier = Modifier.weight(1f)) {
                 Text(if (editing == null) "保存" else "更新")
             }
-            if (editing != null) {
-                OutlinedButton(onClick = { confirmDelete = true }) { Text("删除") }
-            }
+            // 删除入口唯一在详情浮层（Task 11：deleteWithUndo 可撤销），此处不再提供
             TextButton(onClick = onDone) { Text("取消") }
         }
         Spacer(Modifier.width(1.dp).padding(bottom = 24.dp))
@@ -290,19 +285,5 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
         EmojiPickerSheet(current = emoji, category = categoryId,
             onPick = { emoji = it; showEmojiSheet = false },
             onDismiss = { showEmojiSheet = false })
-    }
-
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("删除「${name.ifBlank { "此物品" }}」？") },
-            text = { Text("将从清单移除（软删除，仍可通过备份恢复）。") },
-            confirmButton = {
-                TextButton(onClick = { vm.delete(editing!!.id); onDone() }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
-        )
     }
 }

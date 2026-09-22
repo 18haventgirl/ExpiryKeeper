@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.expirykeeper.App
 import com.expirykeeper.core.data.Item
+import com.expirykeeper.core.data.ItemEvent
 import com.expirykeeper.core.data.ItemRepository
 import com.expirykeeper.core.data.ItemSort
 import com.expirykeeper.core.domain.Backup
@@ -15,9 +16,13 @@ import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.notifications.NotificationHelper
 import com.expirykeeper.notifications.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -26,11 +31,20 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.LocalDate
 
+/** 一次性提示消息：actionLabel 非空时 Snackbar 带动作按钮，Performed 后回调 action */
+data class SnackbarMsg(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
+
 class ItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo: ItemRepository = (application as App).container.repository
 
+    private val prefs = (application as App).container.prefs
+
     private val today: LocalDate get() = LocalDate.now()
+
+    /** 一次性 Snackbar 事件流（EkApp 顶层 Scaffold 消费）；extraBuffer 防无订阅瞬丢 */
+    private val _snackbar = MutableSharedFlow<SnackbarMsg>(extraBufferCapacity = 4)
+    val snackbar: SharedFlow<SnackbarMsg> = _snackbar.asSharedFlow()
 
     val items: StateFlow<List<Item>> = repo.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -76,6 +90,39 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     fun delete(id: String) = viewModelScope.launch {
         repo.softDelete(id)
         ReminderScheduler.runNow(getApplication())
+    }
+
+    /** 详情屏删除：软删 + 撤消退路；撤销走 repo.save（updatedAt 刷新 → 大于墓碑，重新可见） */
+    fun deleteWithUndo(id: String) = viewModelScope.launch {
+        val original = repo.getById(id) ?: return@launch
+        repo.softDelete(id)
+        NotificationHelper.cancelItem(getApplication(), id)
+        ReminderScheduler.runNow(getApplication())
+        _snackbar.emit(
+            SnackbarMsg("已删除《${original.name}》", "撤销") {
+                viewModelScope.launch {
+                    repo.save(original)
+                    ReminderScheduler.runNow(getApplication())
+                }
+            },
+        )
+    }
+
+    /** 详情浮层数据源：Room 实时流，快速操作后 UI 自动刷新 */
+    fun observeItem(id: String): Flow<Item?> = repo.observeById(id)
+
+    /** 该物品最近 30 天事件流水（详情"最近记录"） */
+    suspend fun recentEventsFor(itemId: String): List<ItemEvent> =
+        repo.recentEvents(30).filter { it.itemId == itemId }
+
+    /** 设置概览：30 天续期(roll)次数 */
+    suspend fun rollCount30d(): Int = repo.rollCount30d()
+
+    /** 动态取色开关：读即时值；写 prefs 后由 UI 触发 activity recreate 生效 */
+    val dynamicColorEnabled: Boolean get() = prefs.dynamicColor
+
+    fun setDynamicColor(value: Boolean) {
+        prefs.dynamicColor = value
     }
 
     fun consumeOne(id: String) = viewModelScope.launch { repo.consumeOne(id) }

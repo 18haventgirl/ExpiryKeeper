@@ -14,6 +14,9 @@ class ItemRepository(
 
     suspend fun getById(id: String): Item? = itemDao.getById(id)
 
+    /** 详情浮层数据源：含墓碑行（deletedAt 非空由 UI 显示"已不在清单"），删除后实时更新 */
+    fun observeById(id: String): Flow<Item?> = itemDao.observeById(id)
+
     suspend fun save(item: Item) {
         val now = System.currentTimeMillis()
         val todayEpoch = java.time.LocalDate.now().toEpochDay()
