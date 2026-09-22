@@ -3,12 +3,14 @@ package com.expirykeeper
 import android.app.Application
 import androidx.room.Room
 import com.expirykeeper.core.data.AppDatabase
+import com.expirykeeper.core.data.AppPrefs
 import com.expirykeeper.core.data.ItemRepository
 import com.expirykeeper.notifications.ReminderScheduler
 
 class AppContainer(
     val repository: ItemRepository,
     val deviceId: String,
+    val prefs: AppPrefs,
 )
 
 class App : Application() {
@@ -26,7 +28,11 @@ class App : Application() {
             deviceId = java.util.UUID.randomUUID().toString()
             prefs.edit().putString("deviceId", deviceId).apply()
         }
-        container = AppContainer(ItemRepository(db.itemDao(), db.changeLogDao(), db.eventDao(), deviceId), deviceId)
+        container = AppContainer(
+            ItemRepository(db.itemDao(), db.changeLogDao(), db.eventDao(), deviceId),
+            deviceId,
+            AppPrefs(this),
+        )
         ReminderScheduler.schedule(this)
     }
 }

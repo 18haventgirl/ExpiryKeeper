@@ -23,8 +23,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) {
             askNotification.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        val dynamicAllowed = (application as App).container.prefs.dynamicColor
         setContent {
-            EkTheme {
+            EkTheme(dynamicAllowed = dynamicAllowed) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier) {
                     EkApp()
                 }

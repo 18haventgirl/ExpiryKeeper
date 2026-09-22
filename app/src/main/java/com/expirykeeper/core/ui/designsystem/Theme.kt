@@ -1,24 +1,27 @@
 package com.expirykeeper.core.ui.designsystem
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF00696D),
-    secondary = Color(0xFF4B6364),
-    tertiary = Color(0xFF8A4E00),
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFF4FD8DC),
-    secondary = Color(0xFFB0CCCD),
-    tertiary = Color(0xFFFFB870),
-)
-
+/**
+ * 应用主题：API31+ 且 [dynamicAllowed] 开 → Material You 动态取色；否则回落品牌 teal。
+ * 开关来源：MainActivity 读 app.container.prefs.dynamicColor 后传入。
+ */
 @Composable
-fun EkTheme(darkTheme: Boolean = androidx.compose.foundation.isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors, content = content)
+fun EkTheme(dynamicAllowed: Boolean = true, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val dark = isSystemInDarkTheme()
+    val scheme = if (dynamicAllowed && Build.VERSION.SDK_INT >= 31) {
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (dark) {
+        DarkColors
+    } else {
+        LightColors
+    }
+    MaterialTheme(colorScheme = scheme, shapes = EkShapes, typography = EkTypography, content = content)
 }
