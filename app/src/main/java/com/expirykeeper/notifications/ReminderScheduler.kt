@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -38,8 +39,10 @@ object ReminderScheduler {
         manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
     }
 
+    /** API 31 起才需要精确闹钟权限；31 以下系统始终允许精确闹钟 */
     private fun canScheduleExact(context: Context): Boolean =
-        context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     private fun alarmIntent(context: Context): PendingIntent =
         PendingIntent.getBroadcast(
