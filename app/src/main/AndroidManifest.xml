@@ -23,10 +23,10 @@
         </activity>
 
         <receiver
-            android:name=".reminders.ReminderAlarmReceiver"
+            android:name=".notifications.ReminderAlarmReceiver"
             android:exported="false" />
         <receiver
-            android:name=".reminders.BootReceiver"
+            android:name=".notifications.BootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -2,9 +2,9 @@ package com.expirykeeper
 
 import android.app.Application
 import androidx.room.Room
-import com.expirykeeper.data.AppDatabase
-import com.expirykeeper.data.ItemRepository
-import com.expirykeeper.reminders.ReminderScheduler
+import com.expirykeeper.core.data.AppDatabase
+import com.expirykeeper.core.data.ItemRepository
+import com.expirykeeper.notifications.ReminderScheduler
 
 class AppContainer(
     val repository: ItemRepository,

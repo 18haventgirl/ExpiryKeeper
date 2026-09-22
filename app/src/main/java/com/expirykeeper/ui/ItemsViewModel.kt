@@ -4,9 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.expirykeeper.App
-import com.expirykeeper.data.Item
-import com.expirykeeper.data.ItemRepository
-import com.expirykeeper.reminders.ReminderScheduler
+import com.expirykeeper.core.data.Item
+import com.expirykeeper.core.data.ItemRepository
+import com.expirykeeper.notifications.ReminderScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn

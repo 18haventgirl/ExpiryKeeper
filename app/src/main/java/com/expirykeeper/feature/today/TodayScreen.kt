@@ -1,4 +1,4 @@
-package com.expirykeeper.ui
+package com.expirykeeper.feature.today
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,10 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.expirykeeper.data.Categories
-import com.expirykeeper.reminders.DueStatus
-import com.expirykeeper.reminders.Reminder
-import com.expirykeeper.reminders.ReminderEngine
+import com.expirykeeper.core.data.Categories
+import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.Reminder
+import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 
 @Composable

@@ -1,7 +1,9 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.domain
 
-import com.expirykeeper.data.Item
-import com.expirykeeper.data.ReminderKind
+import com.expirykeeper.core.data.Item
+import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.ReminderEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

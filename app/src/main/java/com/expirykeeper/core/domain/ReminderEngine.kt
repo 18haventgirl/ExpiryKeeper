@@ -1,7 +1,7 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.core.domain
 
-import com.expirykeeper.data.Item
-import com.expirykeeper.data.ReminderKind
+import com.expirykeeper.core.data.Item
+import com.expirykeeper.core.data.ReminderKind
 import java.time.LocalDate
 
 enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY }

@@ -1,4 +1,4 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.notifications
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,6 +8,8 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.expirykeeper.MainActivity
 import com.expirykeeper.R
+import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.Reminder
 
 object NotificationHelper {
     const val CHANNEL_ID = "expiry_reminders"

@@ -1,4 +1,4 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.notifications
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -9,9 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.expirykeeper.reminders.ReminderScheduler
-import com.expirykeeper.ui.EkApp
-import com.expirykeeper.ui.theme.EkTheme
+import com.expirykeeper.core.ui.designsystem.EkTheme
+import com.expirykeeper.notifications.ReminderScheduler
 
 class MainActivity : ComponentActivity() {
 

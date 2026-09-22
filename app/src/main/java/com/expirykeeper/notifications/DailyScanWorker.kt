@@ -1,7 +1,8 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.notifications
 
 import android.content.Context
 import androidx.work.CoroutineWorker
+import com.expirykeeper.core.domain.ReminderEngine
 import java.time.LocalDate
 
 class DailyScanWorker(context: Context, params: androidx.work.WorkerParameters) :

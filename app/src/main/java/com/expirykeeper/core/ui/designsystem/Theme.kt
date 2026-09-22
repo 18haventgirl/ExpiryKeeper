@@ -1,4 +1,4 @@
-package com.expirykeeper.ui.theme
+package com.expirykeeper.core.ui.designsystem
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme

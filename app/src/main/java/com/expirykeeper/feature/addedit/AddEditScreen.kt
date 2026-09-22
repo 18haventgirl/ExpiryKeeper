@@ -1,4 +1,4 @@
-package com.expirykeeper.ui
+package com.expirykeeper.feature.addedit
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,10 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.expirykeeper.data.Categories
-import com.expirykeeper.data.CategoryPreset
-import com.expirykeeper.data.Item
-import com.expirykeeper.data.ReminderKind
+import com.expirykeeper.core.data.Categories
+import com.expirykeeper.core.data.CategoryPreset
+import com.expirykeeper.core.data.Item
+import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.ui.ItemsViewModel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

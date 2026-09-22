@@ -1,4 +1,4 @@
-package com.expirykeeper.ui
+package com.expirykeeper
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -20,6 +20,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.expirykeeper.feature.addedit.AddEditScreen
+import com.expirykeeper.feature.list.ListScreen
+import com.expirykeeper.feature.today.TodayScreen
+import com.expirykeeper.ui.ItemsViewModel
 
 @Composable
 fun EkApp(vm: ItemsViewModel = viewModel()) {

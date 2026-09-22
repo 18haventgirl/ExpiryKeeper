@@ -1,4 +1,4 @@
-package com.expirykeeper.ui
+package com.expirykeeper.feature.list
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,8 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.expirykeeper.data.Categories
-import com.expirykeeper.data.ReminderKind
+import com.expirykeeper.core.data.Categories
+import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.feature.today.ItemRow
+import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 

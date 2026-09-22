@@ -1,4 +1,4 @@
-package com.expirykeeper.reminders
+package com.expirykeeper.notifications
 
 import android.app.AlarmManager
 import android.app.PendingIntent

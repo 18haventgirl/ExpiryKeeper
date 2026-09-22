@@ -1,4 +1,4 @@
-package com.expirykeeper.data
+package com.expirykeeper.core.data
 
 /** 内置品类：默认提醒语义 + 保质期常识（M2 扩充为用户可编辑模板） */
 data class CategoryPreset(

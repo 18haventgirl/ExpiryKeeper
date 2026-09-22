@@ -1,4 +1,4 @@
-package com.expirykeeper.data
+package com.expirykeeper.core.data
 
 import androidx.room.TypeConverter
 
