@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 class ItemRepository(
     private val itemDao: ItemDao,
     private val changeLogDao: ChangeLogDao,
+    private val eventDao: EventDao,
     private val deviceId: String,
 ) {
     fun observeAll(): Flow<List<Item>> = itemDao.observeAll()
@@ -15,16 +16,61 @@ class ItemRepository(
 
     suspend fun save(item: Item) {
         val now = System.currentTimeMillis()
-        val toWrite = item.copy(updatedAt = now, lastModifiedBy = deviceId)
+        val todayEpoch = java.time.LocalDate.now().toEpochDay()
+        val derived = if (item.expireAtEpochDay == null && item.shelfLifeDays != null && item.reminderKind == ReminderKind.EXPIRY) {
+            val base = item.openedAtEpochDay ?: (item.createdAt / 86_400_000L)
+            item.copy(expireAtEpochDay = base + item.shelfLifeDays)
+        } else item
+        val isNew = itemDao.getById(item.id) == null
+        val toWrite = derived.copy(updatedAt = now, lastModifiedBy = deviceId)
         itemDao.upsert(toWrite)
         changeLogDao.insert(ChangeLogEntry(itemId = item.id, op = "upsert", updatedAt = now, deviceId = deviceId))
+        eventDao.insert(ItemEvent(itemId = item.id, kind = if (isNew) "add" else "edit", epochDay = todayEpoch))
     }
 
     suspend fun softDelete(id: String) {
         val now = System.currentTimeMillis()
         itemDao.softDelete(id, now)
         changeLogDao.insert(ChangeLogEntry(itemId = id, op = "delete", updatedAt = now, deviceId = deviceId))
+        eventDao.insert(ItemEvent(itemId = id, kind = "delete", epochDay = java.time.LocalDate.now().toEpochDay()))
     }
+
+    /** 快速操作"续期/吃完"：EXPIRY 按保质期滚动，RECURRING 按周期滚到未来；无法推导返回 false */
+    suspend fun rollForward(id: String, today: java.time.LocalDate): Boolean {
+        val item = itemDao.getById(id) ?: return false
+        val target = when (item.reminderKind) {
+            ReminderKind.EXPIRY -> item.shelfLifeDays?.let { today.toEpochDay() + it } ?: return false
+            ReminderKind.RECURRING -> {
+                var next = (item.nextDueAtEpochDay ?: today.toEpochDay()) + (item.recurrenceDays ?: return false)
+                while (next < today.toEpochDay()) next += item.recurrenceDays!!
+                next
+            }
+            ReminderKind.CONSUMABLE -> return false
+        }
+        itemDao.setExpire(id, target, System.currentTimeMillis())
+        if (item.reminderKind == ReminderKind.RECURRING) {
+            itemDao.upsert(item.copy(nextDueAtEpochDay = target, updatedAt = System.currentTimeMillis(), lastModifiedBy = deviceId))
+        }
+        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = System.currentTimeMillis(), deviceId = deviceId))
+        eventDao.insert(ItemEvent(itemId = id, kind = "roll", epochDay = today.toEpochDay()))
+        return true
+    }
+
+    suspend fun markHandled(id: String, status: String, today: java.time.LocalDate) {
+        itemDao.setHandled(id, status, today.toEpochDay(), System.currentTimeMillis())
+        eventDao.insert(ItemEvent(itemId = id, kind = "handle", epochDay = today.toEpochDay()))
+    }
+
+    suspend fun snooze(id: String, days: Int, today: java.time.LocalDate) {
+        itemDao.setSnoozedUntil(id, today.toEpochDay() + days, System.currentTimeMillis())
+        eventDao.insert(ItemEvent(itemId = id, kind = "snooze", epochDay = today.toEpochDay()))
+    }
+
+    suspend fun recentEvents(days: Int = 30): List<ItemEvent> =
+        eventDao.since(java.time.LocalDate.now().minusDays(days.toLong()).toEpochDay())
+
+    suspend fun rollCount30d(): Int =
+        eventDao.rollCountSince(java.time.LocalDate.now().minusDays(30).toEpochDay())
 
     suspend fun consumeOne(id: String) {
         val item = itemDao.getById(id) ?: return

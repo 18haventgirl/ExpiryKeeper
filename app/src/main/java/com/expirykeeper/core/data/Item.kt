@@ -26,5 +26,24 @@ data class Item(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val lastModifiedBy: String? = null,
+    /** 物品级 emoji 图标；null 则回退品类预设 */
+    val emoji: String? = null,
+    /** 开瓶/开封日期 epochDay；与 shelfLifeDays 联合推导到期日 */
+    val openedAtEpochDay: Long? = null,
+    val shelfLifeDays: Int? = null,
+    /** 今日已处理（不再提醒）的日期与状态名，次日自动失效 */
+    val handledAtEpochDay: Long? = null,
+    val handledStatus: String? = null,
+    /** 延后提醒截止日：today <= 该值时引擎静默 */
+    val snoozedUntilEpochDay: Long? = null,
     val deletedAt: Long? = null,
+)
+
+@Entity(tableName = "events")
+data class ItemEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long? = null,
+    val itemId: String,
+    val kind: String,
+    val epochDay: Long,
+    val createdAt: Long = System.currentTimeMillis(),
 )

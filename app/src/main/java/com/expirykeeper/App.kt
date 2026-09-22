@@ -17,14 +17,16 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        val db = Room.databaseBuilder(this, AppDatabase::class.java, "expiry-keeper.db").build()
+        val db = Room.databaseBuilder(this, AppDatabase::class.java, "expiry-keeper.db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
         var deviceId = prefs.getString("deviceId", null)
         if (deviceId == null) {
             deviceId = java.util.UUID.randomUUID().toString()
             prefs.edit().putString("deviceId", deviceId).apply()
         }
-        container = AppContainer(ItemRepository(db.itemDao(), db.changeLogDao(), deviceId), deviceId)
+        container = AppContainer(ItemRepository(db.itemDao(), db.changeLogDao(), db.eventDao(), deviceId), deviceId)
         ReminderScheduler.schedule(this)
     }
 }

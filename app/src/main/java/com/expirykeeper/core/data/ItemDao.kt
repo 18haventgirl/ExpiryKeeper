@@ -27,4 +27,16 @@ interface ItemDao {
 
     @Query("UPDATE items SET quantity = :qty, updatedAt = :now WHERE id = :id")
     suspend fun setQuantity(id: String, qty: Double, now: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM items WHERE id = :id")
+    fun observeById(id: String): Flow<Item?>
+
+    @Query("UPDATE items SET expireAtEpochDay = :epochDay, updatedAt = :now WHERE id = :id")
+    suspend fun setExpire(id: String, epochDay: Long, now: Long)
+
+    @Query("UPDATE items SET handledAtEpochDay = :day, handledStatus = :status, updatedAt = :now WHERE id = :id")
+    suspend fun setHandled(id: String, status: String, day: Long, now: Long)
+
+    @Query("UPDATE items SET snoozedUntilEpochDay = :until, handledAtEpochDay = NULL, handledStatus = NULL, updatedAt = :now WHERE id = :id")
+    suspend fun setSnoozedUntil(id: String, until: Long, now: Long)
 }
