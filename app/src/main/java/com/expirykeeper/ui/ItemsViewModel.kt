@@ -8,14 +8,17 @@ import androidx.lifecycle.viewModelScope
 import com.expirykeeper.App
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemRepository
+import com.expirykeeper.core.data.ItemSort
 import com.expirykeeper.core.domain.Backup
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.notifications.NotificationHelper
 import com.expirykeeper.notifications.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -39,6 +42,31 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     /** 未来 14 天到期摘要（Hero "两周内" 统计用） */
     val upcoming14: StateFlow<List<Pair<Item, Long>>> = items.map { ReminderEngine.upcoming(it, today) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 清单搜索关键词：匹配 名称/备注/位置，忽略大小写；空串 = 不过滤 */
+    val filterQuery = MutableStateFlow("")
+
+    /** 清单排序方式（仅会话内记忆，不持久化） */
+    val sortOrder = MutableStateFlow(ItemSort.EXPIRE_ASC)
+
+    /** items × filterQuery × sortOrder 派生：过滤 + 4 路排序后的可见清单 */
+    val visibleItems: StateFlow<List<Item>> = combine(items, filterQuery, sortOrder) { list, q, sort ->
+        list.asSequence()
+            .filter {
+                q.isBlank() ||
+                    it.name.contains(q, ignoreCase = true) ||
+                    (it.note?.contains(q, ignoreCase = true) ?: false) ||
+                    (it.location?.contains(q, ignoreCase = true) ?: false)
+            }
+            .let { seq ->
+                when (sort) {
+                    ItemSort.EXPIRE_ASC -> seq.sortedBy { ReminderEngine.effectiveExpireDay(it) ?: Long.MAX_VALUE }
+                    ItemSort.NAME -> seq.sortedBy { it.name }
+                    ItemSort.CREATED_DESC -> seq.sortedByDescending { it.createdAt }
+                    ItemSort.CATEGORY -> seq.sortedBy { it.categoryId }
+                }
+            }.toList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun save(item: Item) = viewModelScope.launch {
         repo.save(item)

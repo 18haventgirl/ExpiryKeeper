@@ -5,6 +5,9 @@ import androidx.room.PrimaryKey
 
 enum class ReminderKind { EXPIRY, CONSUMABLE, RECURRING }
 
+/** 清单排序方式（纯枚举，无域逻辑；UI 侧负责中文标签与分组渲染） */
+enum class ItemSort { EXPIRE_ASC, NAME, CREATED_DESC, CATEGORY }
+
 @Entity(tableName = "items")
 data class Item(
     @PrimaryKey val id: String,

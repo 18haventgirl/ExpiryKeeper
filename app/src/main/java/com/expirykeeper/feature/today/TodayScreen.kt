@@ -21,11 +21,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -178,25 +176,6 @@ private fun ReminderCard(
                 AssistChip(onClick = { vm.rollForward(item.id) }, label = { Text("🍽 续期") })
                 AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
                 AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
-            }
-        }
-    }
-}
-
-@Composable
-fun ItemRow(emoji: String, name: String, trailing: String, danger: Boolean, subtitle: String? = null) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(emoji, style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge)
-                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall)
-            }
-            Surface(color = if (danger) MaterialTheme.colorScheme.errorContainer
-                else MaterialTheme.colorScheme.surfaceVariant) {
-                Text(trailing, Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelMedium)
             }
         }
     }
