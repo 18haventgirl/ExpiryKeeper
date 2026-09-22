@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemEvent
-import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusPill
@@ -119,7 +119,7 @@ private fun DetailContent(
     }
     // 当前状态：有提醒 → StatusPill；引擎静默/无规则 → "节奏正常"
     if (reminder != null) {
-        StatusPill(reminder.status, statusLabel(reminder.status))
+        StatusPill(reminder.status, reminder.status.labelZh)
     } else {
         NeutralPill("节奏正常")
     }
@@ -223,15 +223,6 @@ private fun NeutralPill(label: String) {
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
         )
     }
-}
-
-private fun statusLabel(status: DueStatus): String = when (status) {
-    DueStatus.OVERDUE -> "逾期"
-    DueStatus.DUE_TODAY -> "今天到期"
-    DueStatus.DUE_SOON -> "即将到期"
-    DueStatus.LOW_STOCK -> "库存低"
-    DueStatus.RENEWAL_SOON -> "即将续费"
-    DueStatus.RENEWAL_TODAY -> "今天续费"
 }
 
 private fun eventKindLabel(kind: String): String = when (kind) {

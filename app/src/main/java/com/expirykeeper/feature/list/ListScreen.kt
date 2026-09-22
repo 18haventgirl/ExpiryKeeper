@@ -32,7 +32,7 @@ import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemSort
-import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.core.ui.designsystem.EmptyState
@@ -151,7 +151,7 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
         onLongClick = { onDetail(item.id) },
     ) {
         if (reminder != null) {
-            StatusPill(reminder.status, reminder.status.label)
+            StatusPill(reminder.status, reminder.status.labelZh)
         } else {
             Text(
                 quantityText(item),
@@ -174,14 +174,4 @@ private val ItemSort.label: String
         ItemSort.NAME -> "按名称"
         ItemSort.CREATED_DESC -> "按添加时间"
         ItemSort.CATEGORY -> "按品类"
-    }
-
-private val DueStatus.label: String
-    get() = when (this) {
-        DueStatus.OVERDUE -> "逾期"
-        DueStatus.DUE_TODAY -> "今天到期"
-        DueStatus.DUE_SOON -> "即将到期"
-        DueStatus.LOW_STOCK -> "库存低"
-        DueStatus.RENEWAL_SOON -> "即将续费"
-        DueStatus.RENEWAL_TODAY -> "今天续费"
     }

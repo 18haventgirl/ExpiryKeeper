@@ -1,6 +1,7 @@
 package com.expirykeeper.notifications
 
 import android.app.NotificationChannel
+import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -16,6 +17,14 @@ import java.time.LocalDate
 
 object NotificationHelper {
     const val CHANNEL_ID = "expiry_reminders"
+
+    /** 渠道组（设置页可见的归类）与通知组（通知栏聚合）两把钥匙，各司其职 */
+    private const val CHANNEL_GROUP_ID = "household"
+    private const val CHANNEL_GROUP_NAME = "到期提醒"
+    private const val GROUP_KEY = "com.expirykeeper.GROUP"
+
+    /** 摘要通知固定 id：notifIdFor 恒为 >=0，取负值避免碰撞 */
+    private const val SUMMARY_ID = -1
 
     /** 取消单条通知（快速操作后清掉对应 id 的既有通知） */
     fun cancel(ctx: Context, id: Int) {
@@ -40,9 +49,15 @@ object NotificationHelper {
 
     private fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        // minSdk 29：始终高于 O，渠道组直接建；createNotificationChannelGroup 幂等
+        manager.createNotificationChannelGroup(
+            NotificationChannelGroup(CHANNEL_GROUP_ID, CHANNEL_GROUP_NAME)
+        )
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "到期提醒", NotificationManager.IMPORTANCE_DEFAULT)
+                NotificationChannel(CHANNEL_ID, "到期提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    group = CHANNEL_GROUP_ID
+                }
             )
         }
     }
@@ -50,12 +65,21 @@ object NotificationHelper {
     fun notifyAll(context: Context, reminders: List<Reminder>) {
         ensureChannel(context)
         val manager = context.getSystemService(NotificationManager::class.java)
+        val grouped = reminders.size > 1 // 单条不挂组机制，避免摘要闪烁
         reminders.forEach { reminder ->
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pi = PendingIntent.getActivity(context, reminder.notificationId, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val pi = PendingIntent.getActivity(
+                context, reminder.notificationId, mainIntent(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val snoozePi = PendingIntent.getBroadcast(
+                context, reminder.notificationId,
+                Intent(context, ReminderAlarmReceiver::class.java).apply {
+                    action = ReminderAlarmReceiver.ACTION_SNOOZE
+                    putExtra(ReminderAlarmReceiver.EXTRA_ITEM_ID, reminder.item.id)
+                    putExtra(ReminderAlarmReceiver.EXTRA_NOTIF_ID, reminder.notificationId)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             val body = when (reminder.status) {
                 DueStatus.DUE_SOON -> "「${reminder.item.name}」还有 ${reminder.daysLeft} 天到期"
                 DueStatus.DUE_TODAY -> "「${reminder.item.name}」今天到期"
@@ -64,16 +88,39 @@ object NotificationHelper {
                 DueStatus.RENEWAL_SOON -> "「${reminder.item.name}」还有 ${reminder.daysLeft} 天扣费"
                 DueStatus.RENEWAL_TODAY -> "「${reminder.item.name}」今天扣费，不需要就取消订阅"
             }
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("${ReminderEngine.displayIcon(reminder.item, Categories.byId(reminder.item.categoryId)?.emoji ?: "📦")} ${reminder.item.name}")
+                .setContentText(body)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .addAction(0, "稍后 3 天", snoozePi)
+            if (grouped) builder.setGroup(GROUP_KEY)
+            manager.notify(reminder.notificationId, builder.build())
+        }
+        if (grouped) {
+            val summaryPi = PendingIntent.getActivity(
+                context, SUMMARY_ID, mainIntent(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             manager.notify(
-                reminder.notificationId,
+                SUMMARY_ID,
                 NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle("${ReminderEngine.displayIcon(reminder.item, Categories.byId(reminder.item.categoryId)?.emoji ?: "📦")} 到期管家")
-                    .setContentText(body)
-                    .setContentIntent(pi)
+                    .setGroup(GROUP_KEY)
+                    .setGroupSummary(true)
+                    .setContentTitle("到期管家 · ${reminders.size} 件事需要处理")
+                    .setContentText(reminders.take(3).joinToString("、") { it.item.name })
+                    .setContentIntent(summaryPi)
                     .setAutoCancel(true)
                     .build()
             )
         }
     }
+
+    private fun mainIntent(context: Context): Intent =
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
 }

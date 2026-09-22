@@ -6,6 +6,17 @@ import java.time.LocalDate
 
 enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY }
 
+/** 到期状态的中文标签：列表 / 详情 / 通知共用（Task 12 前置：自 UI 私有扩展上收） */
+val DueStatus.labelZh: String
+    get() = when (this) {
+        DueStatus.OVERDUE -> "逾期"
+        DueStatus.DUE_TODAY -> "今天到期"
+        DueStatus.DUE_SOON -> "即将到期"
+        DueStatus.LOW_STOCK -> "库存低"
+        DueStatus.RENEWAL_SOON -> "即将续费"
+        DueStatus.RENEWAL_TODAY -> "今天续费"
+    }
+
 data class Reminder(
     val item: Item,
     val status: DueStatus,

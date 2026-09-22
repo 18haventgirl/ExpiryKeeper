@@ -136,17 +136,17 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         ReminderScheduler.runNow(getApplication())
     }
 
-    /** 快速操作·今天不再提醒：标记 handled，次日引擎自动恢复 */
+    /** 快速操作·今天不再提醒：标记 handled，次日引擎自动恢复；cancelItem 兜底清掉旧日期变体的通知 */
     fun markHandled(r: Reminder) = viewModelScope.launch {
         repo.markHandled(r.item.id, r.status.name, today)
-        NotificationHelper.cancel(getApplication(), r.notificationId)
+        NotificationHelper.cancelItem(getApplication(), r.item.id)
         ReminderScheduler.runNow(getApplication())
     }
 
-    /** 快速操作·稍后 3 天：snooze 截止日写 today+3，引擎期间静默 */
+    /** 快速操作·稍后 3 天：snooze 截止日写 today+3，引擎期间静默；cancelItem 兜底清掉旧日期变体的通知 */
     fun snooze3(r: Reminder) = viewModelScope.launch {
         repo.snooze(r.item.id, 3, today)
-        NotificationHelper.cancel(getApplication(), r.notificationId)
+        NotificationHelper.cancelItem(getApplication(), r.item.id)
         ReminderScheduler.runNow(getApplication())
     }
 
