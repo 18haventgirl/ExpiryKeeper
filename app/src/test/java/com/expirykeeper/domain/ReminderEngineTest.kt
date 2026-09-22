@@ -78,4 +78,33 @@ class ReminderEngineTest {
         val b = ReminderEngine.computeOne(expiryItem(0, listOf(0)), today)!!
         assertEquals(a.notificationId, b.notificationId)
     }
+
+    @Test fun snoozedItemStaysSilent() {
+        val item = expiryItem(0, listOf(0)).copy(snoozedUntilEpochDay = epoch + 5)
+        assertTrue(ReminderEngine.computeForDate(listOf(item), today).isEmpty())
+    }
+
+    @Test fun handledTodaySilentButReturnsTomorrow() {
+        val item = expiryItem(0, listOf(0)).copy(handledAtEpochDay = epoch, handledStatus = "DUE_TODAY")
+        assertTrue(ReminderEngine.computeForDate(listOf(item), today).isEmpty())
+        val tomorrow = today.plusDays(1)
+        val r = ReminderEngine.computeForDate(listOf(item), tomorrow)
+        assertEquals(1, r.size)
+        assertEquals(DueStatus.OVERDUE, r[0].status)
+    }
+
+    @Test fun effectiveExpireDerivedFromOpenedShelfLife() {
+        val opened = LocalDate.of(2026, 9, 1).toEpochDay()
+        val item = expiryItem(0, listOf(0)).copy(expireAtEpochDay = null, openedAtEpochDay = opened, shelfLifeDays = 3)
+        assertEquals(opened + 3, ReminderEngine.effectiveExpireDay(item))
+    }
+
+    @Test fun openedPlusShelfLifeFiresExpiryReminder() {
+        val opened = today.minusDays(5).toEpochDay()
+        val item = expiryItem(0, listOf(0)).copy(
+            expireAtEpochDay = null, openedAtEpochDay = opened, shelfLifeDays = 5,
+        )
+        val r = ReminderEngine.computeOne(item, today)!!
+        assertEquals(DueStatus.DUE_TODAY, r.status)
+    }
 }

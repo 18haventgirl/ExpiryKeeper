@@ -8,8 +8,10 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.expirykeeper.MainActivity
 import com.expirykeeper.R
+import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.Reminder
+import com.expirykeeper.core.domain.ReminderEngine
 
 object NotificationHelper {
     const val CHANNEL_ID = "expiry_reminders"
@@ -44,7 +46,7 @@ object NotificationHelper {
                 reminder.notificationId,
                 NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle("到期管家")
+                    .setContentTitle("${ReminderEngine.displayIcon(reminder.item, Categories.byId(reminder.item.categoryId)?.emoji ?: "📦")} 到期管家")
                     .setContentText(body)
                     .setContentIntent(pi)
                     .setAutoCancel(true)

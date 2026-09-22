@@ -21,14 +21,27 @@ object ReminderEngine {
     fun computeForDate(items: List<Item>, today: LocalDate): List<Reminder> =
         items.filter { it.deletedAt == null }.mapNotNull { computeOne(it, today) }
 
-    fun computeOne(item: Item, today: LocalDate): Reminder? = when (item.reminderKind) {
-        ReminderKind.EXPIRY -> expiry(item, today)
-        ReminderKind.CONSUMABLE -> consumable(item)
-        ReminderKind.RECURRING -> recurring(item, today)
+    fun computeOne(item: Item, today: LocalDate): Reminder? {
+        item.snoozedUntilEpochDay?.let { if (today.toEpochDay() <= it) return null }
+        val reminder = when (item.reminderKind) {
+            ReminderKind.EXPIRY -> expiry(item, today)
+            ReminderKind.CONSUMABLE -> consumable(item)
+            ReminderKind.RECURRING -> recurring(item, today)
+        }
+        if (reminder != null && item.handledAtEpochDay == today.toEpochDay() &&
+            item.handledStatus == reminder.status.name) return null
+        return reminder
     }
 
+    /** 到期日 = 直接填写的过期日；否则由 开封日(或录入日)+保质期天数 推导 */
+    fun effectiveExpireDay(item: Item): Long? = item.expireAtEpochDay
+        ?: item.shelfLifeDays?.let { (item.openedAtEpochDay ?: (item.createdAt / 86_400_000L)) + it }
+
+    /** 物品级 emoji 优先，回退品类图标；UI 与通知共用 */
+    fun displayIcon(item: Item, categoryEmoji: String): String = item.emoji ?: categoryEmoji
+
     private fun expiry(item: Item, today: LocalDate): Reminder? {
-        val expire = item.expireAtEpochDay ?: return null
+        val expire = effectiveExpireDay(item) ?: return null
         val daysLeft = expire - today.toEpochDay()
         val status = when {
             daysLeft < 0 -> DueStatus.OVERDUE
