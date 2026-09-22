@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.expirykeeper.feature.addedit.AddEditScreen
 import com.expirykeeper.feature.list.ListScreen
+import com.expirykeeper.feature.settings.SettingsScreen
 import com.expirykeeper.feature.today.TodayScreen
 import com.expirykeeper.ui.ItemsViewModel
 
@@ -55,8 +56,9 @@ fun EkApp(vm: ItemsViewModel = viewModel()) {
         },
     ) { padding ->
         NavHost(navController = nav, startDestination = "today", modifier = Modifier.padding(padding)) {
-            composable("today") { TodayScreen(vm) }
+            composable("today") { TodayScreen(vm, onSettings = { nav.navigate("settings") }) }
             composable("list") { ListScreen(vm, onEdit = { id -> nav.navigate("add?itemId=$id") }) }
+            composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             composable("add?itemId={itemId}") { entry ->
                 val raw = entry.arguments?.getString("itemId")
                 AddEditScreen(vm, itemId = raw?.takeIf { it != "null" },

@@ -59,6 +59,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    // 仅测试 JVM 补 org.json（运行时用 Android 内置）
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)

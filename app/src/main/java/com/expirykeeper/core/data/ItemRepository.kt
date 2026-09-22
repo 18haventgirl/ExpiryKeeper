@@ -90,4 +90,37 @@ class ItemRepository(
 
     /** M3 用：返回 seq 水位，之后取增量 */
     suspend fun changeLogSince(seq: Long): List<ChangeLogEntry> = changeLogDao.since(seq)
+
+    /**
+     * 恢复入口：与本地 LWW 合并后写入，绝不清空数据库。
+     *
+     * 先按 id 对 incoming 去重（同 id 保留 updatedAt 最大的一条）再进 SyncMerge：
+     * SyncMerge 只拿 incoming 与"写库前的本地快照"逐条比较，对文件内部自相矛盾的
+     * 重复条目不设防——若不去重，同一 id 的旧记录排在后面会把先写入的新记录盖掉。
+     *
+     * 写入走 [upsertRaw] 而非 [save]：save 会重新盖 updatedAt 时间戳，
+     * 销毁备份文件携带的 LWW 历史，导致下一次合并误判。
+     *
+     * @return written（实际落库条数）与 skipped（incoming 总数 − written，
+     *         含去重折叠与本地更新被 LWW 拒绝两类，账目诚实）
+     */
+    suspend fun importMerged(incoming: List<Item>): Pair<Int, Int> {
+        val deduped = incoming.groupBy { it.id }.values.map { group -> group.maxBy { it.updatedAt } }
+        val result = com.expirykeeper.core.domain.SyncMerge.merge(itemDao.getAll(), deduped)
+        result.toWrite.forEach { upsertRaw(it) }
+        return result.toWrite.size to (incoming.size - result.toWrite.size)
+    }
+
+    /** 原始写入：不动 updatedAt；change_log 记物品自身的 updatedAt，deviceId 用本机 */
+    private suspend fun upsertRaw(item: Item) {
+        itemDao.upsert(item)
+        changeLogDao.insert(
+            ChangeLogEntry(
+                itemId = item.id,
+                op = if (item.deletedAt != null) "delete" else "upsert",
+                updatedAt = item.updatedAt,
+                deviceId = deviceId,
+            )
+        )
+    }
 }

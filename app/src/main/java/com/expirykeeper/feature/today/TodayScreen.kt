@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,7 +33,7 @@ import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 
 @Composable
-fun TodayScreen(vm: ItemsViewModel) {
+fun TodayScreen(vm: ItemsViewModel, onSettings: () -> Unit = {}) {
     val items by vm.items.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     val reminders = ReminderEngine.computeForDate(items, today)
@@ -44,7 +48,13 @@ fun TodayScreen(vm: ItemsViewModel) {
         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item { Spacer(Modifier.width(1.dp).padding(top = 4.dp)) }
+        item {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("今日", style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "设置") }
+            }
+        }
         if (urgent.isEmpty() && soon.isEmpty()) {
             item {
                 Card(Modifier.fillMaxWidth()) {
