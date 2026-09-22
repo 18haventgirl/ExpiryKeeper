@@ -31,8 +31,8 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE id = :id")
     fun observeById(id: String): Flow<Item?>
 
-    @Query("UPDATE items SET expireAtEpochDay = :epochDay, updatedAt = :now WHERE id = :id")
-    suspend fun setExpire(id: String, epochDay: Long, now: Long)
+    @Query("UPDATE items SET expireAtEpochDay = :epochDay, updatedAt = :now, lastModifiedBy = :deviceId WHERE id = :id")
+    suspend fun setExpire(id: String, epochDay: Long, now: Long, deviceId: String)
 
     @Query("UPDATE items SET handledAtEpochDay = :day, handledStatus = :status, updatedAt = :now WHERE id = :id")
     suspend fun setHandled(id: String, status: String, day: Long, now: Long)

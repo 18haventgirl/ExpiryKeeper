@@ -47,22 +47,31 @@ class ItemRepository(
             }
             ReminderKind.CONSUMABLE -> return false
         }
-        itemDao.setExpire(id, target, System.currentTimeMillis())
-        if (item.reminderKind == ReminderKind.RECURRING) {
-            itemDao.upsert(item.copy(nextDueAtEpochDay = target, updatedAt = System.currentTimeMillis(), lastModifiedBy = deviceId))
+        val now = System.currentTimeMillis()
+        when (item.reminderKind) {
+            // RECURRING: single full-row upsert carrying the new due date; no expireAt write.
+            ReminderKind.RECURRING ->
+                itemDao.upsert(item.copy(nextDueAtEpochDay = target, updatedAt = now, lastModifiedBy = deviceId))
+            // EXPIRY: single targeted update, sharing `now` with the change_log entry below.
+            else ->
+                itemDao.setExpire(id, target, now, deviceId)
         }
-        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = System.currentTimeMillis(), deviceId = deviceId))
+        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
         eventDao.insert(ItemEvent(itemId = id, kind = "roll", epochDay = today.toEpochDay()))
         return true
     }
 
     suspend fun markHandled(id: String, status: String, today: java.time.LocalDate) {
-        itemDao.setHandled(id, status, today.toEpochDay(), System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        itemDao.setHandled(id, status, today.toEpochDay(), now)
+        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
         eventDao.insert(ItemEvent(itemId = id, kind = "handle", epochDay = today.toEpochDay()))
     }
 
     suspend fun snooze(id: String, days: Int, today: java.time.LocalDate) {
-        itemDao.setSnoozedUntil(id, today.toEpochDay() + days, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        itemDao.setSnoozedUntil(id, today.toEpochDay() + days, now)
+        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
         eventDao.insert(ItemEvent(itemId = id, kind = "snooze", epochDay = today.toEpochDay()))
     }
 
