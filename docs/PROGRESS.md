@@ -4,7 +4,8 @@
 
 ## 当前状态
 
-- [进行中] M1 单机可用 —— 全部代码已写，构建迭代中（AGP 9 内置 Kotlin 适配 + 国内镜像调通）
+- [x] v2 品质升级（Task 1–13）全部完成 —— 2026-09-22 收尾：lint 0 error / 29 JVM 单测绿 / Room 迁移测试 emulator 通过 / 冷启动无崩溃
+- [进行中] M1 单机可用 —— 代码与 v2 均在 emulator 跑通；MagicOS 真机杀后台验证仍待用户方便时进行
 - 最后更新：2026-09-22
 
 ## 环境与构建备忘
@@ -30,7 +31,17 @@
 - 计划：`docs/superpowers/plans/2026-09-22-expiry-keeper-v2-quality.md`（Task 1–13）
 - [x] T1 git 纳管+CODESTYLE　[x] T2 包分层搬移　[x] T3 Room v2 迁移　[x] T4 引擎 v2　[x] T5 LWW 合并
 - [x] T6 备份/恢复　[x] T7 设计系统　[x] T8 今日 v2　[x] T9 清单 v2　[x] T10 添加 v2
-- [ ] T11 详情+设置　[ ] T12 通知 v2　[ ] T13 全面体检
+- [x] T11 详情+设置（2026-09-22）　[x] T12 通知 v2（2026-09-22）　[x] T13 全面体检（2026-09-22）
+
+#### v2 验收记录（2026-09-22，Task 13 收尾）
+- 设备：emulator-5554 · Pixel 9 (AVD) · Android 17 / API 37
+- 静态：`lintDebug` **0 error**（1 个 NewApi error 已修：`canScheduleExactAlarms` 加 API 31 版本守卫）；16 warning + 1 hint 全部为低级/依赖版本类，逐条判断见 `task-13-report.md`，暂不改动
+- 单测：`testDebugUnitTest` **29/29 绿**（ReminderEngine 14 / ExpiryForm 6 / SyncMerge 6 / Backup 3）
+- 迁移（红线1 直接证据）：`connectedDebugAndroidTest` → `RoomMigrationTest.migrate1To2KeepsData` **通过**（v1 数据迁入 v2 新列、events 表建好、断言未删）。为跑通补了两处测试依赖修复：`androidx.test:runner` 缺失、`kotlinx-serialization` core/json 版本分裂（androidTest 强制对齐 1.8.1）
+- 冷启动冒烟：`install -r` → force-stop → 冷启 → `topResumedActivity=com.expirykeeper/.MainActivity`，进程存活无崩溃；间隔 30s 两次 screencap 均为 1080×2424 非黑屏、渲染今日 v2 真实界面
+- 泄漏粗检：`dumpsys meminfo` 两次采样（中间一次 HOME→重开切应用）TOTAL PSS ≈113MB、Native Heap 13.1→13.5MB（增幅 <20%），无增长趋势
+- 已知遗留 minor：分散记录在各 fix/feat 提交信息中（见 git log），M2 条码、M3 同步仍为未来里程碑
+- 人工验收清单（脚本无法覆盖的 UI 手测项）见 `task-13-report.md` 末尾表格，交由人类伙伴逐项确认
 
 ### M2 品类完备
 - [ ] CONSUMABLE / RECURRING 语义 + 品类模板与保质期常识库
