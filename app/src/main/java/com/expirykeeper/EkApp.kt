@@ -48,7 +48,7 @@ fun EkApp(vm: ItemsViewModel = viewModel()) {
             }
         },
         floatingActionButton = {
-            if (currentRoute != "add?itemId={itemId}") {
+            if (currentRoute != "add?itemId={itemId}" && currentRoute != "settings") {
                 FloatingActionButton(onClick = { nav.navigate("add?itemId=null") }) {
                     Icon(Icons.Filled.Add, "添加")
                 }
@@ -56,7 +56,11 @@ fun EkApp(vm: ItemsViewModel = viewModel()) {
         },
     ) { padding ->
         NavHost(navController = nav, startDestination = "today", modifier = Modifier.padding(padding)) {
-            composable("today") { TodayScreen(vm, onSettings = { nav.navigate("settings") }) }
+            composable("today") {
+                TodayScreen(vm,
+                    onEdit = { id -> nav.navigate("add?itemId=$id") },
+                    onSettings = { nav.navigate("settings") })
+            }
             composable("list") { ListScreen(vm, onEdit = { id -> nav.navigate("add?itemId=$id") }) }
             composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             composable("add?itemId={itemId}") { entry ->

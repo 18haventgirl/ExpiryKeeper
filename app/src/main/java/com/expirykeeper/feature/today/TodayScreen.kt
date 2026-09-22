@@ -1,5 +1,8 @@
 package com.expirykeeper.feature.today
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,9 +15,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,80 +34,153 @@ import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.DueRing
+import com.expirykeeper.core.ui.designsystem.EmptyState
+import com.expirykeeper.core.ui.designsystem.ItemCard
+import com.expirykeeper.core.ui.designsystem.SectionHeader
+import com.expirykeeper.core.ui.designsystem.StatusTone
 import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
-fun TodayScreen(vm: ItemsViewModel, onSettings: () -> Unit = {}) {
+fun TodayScreen(
+    vm: ItemsViewModel,
+    onEdit: (String) -> Unit,
+    onSettings: () -> Unit = {},
+) {
     val items by vm.items.collectAsStateWithLifecycle()
+    val reminders by vm.reminders.collectAsStateWithLifecycle()
+    val upcoming14 by vm.upcoming14.collectAsStateWithLifecycle()
     val today = LocalDate.now()
-    val reminders = ReminderEngine.computeForDate(items, today)
-    val urgent = reminders.filter { it.status == DueStatus.OVERDUE || it.status == DueStatus.DUE_TODAY ||
-        it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
+
+    // 分组（controller ruling 8）：紧急=OVERDUE+DUE_TODAY，即将到期=DUE_SOON+RENEWAL_SOON，需要关注=LOW_STOCK+RENEWAL_TODAY
+    val urgent = reminders.filter { it.status == DueStatus.OVERDUE || it.status == DueStatus.DUE_TODAY }
     val soon = reminders.filter { it.status == DueStatus.DUE_SOON || it.status == DueStatus.RENEWAL_SOON }
-    val upcoming = ReminderEngine.upcoming(items, today, withinDays = 14)
-        .filter { pair -> pair.second > 0 }
-        .take(15)
+    val attention = reminders.filter { it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("今日", style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "设置") }
-            }
+            BigHeader(
+                title = "今日",
+                subtitle = today.format(DateTimeFormatter.ofPattern("M月d日 · EEE", Locale.CHINA)),
+                modifier = Modifier.padding(top = 8.dp),
+                actions = {
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "设置")
+                    }
+                },
+            )
         }
-        if (urgent.isEmpty() && soon.isEmpty()) {
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Text("今天没有要处理的事 ✅", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                }
-            }
+        item {
+            HeroCard(pending = reminders.size, upcoming = upcoming14.size, total = items.size)
+        }
+        if (reminders.isEmpty()) {
+            item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }
         }
         if (urgent.isNotEmpty()) {
-            item { SectionLabel("需要处理") }
-            items(urgent, key = { it.notificationId }) { ReminderRow(it) }
+            item { SectionHeader("紧急", urgent.size) }
+            items(urgent, key = { it.notificationId }) { r ->
+                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = true, modifier = Modifier.animateItem())
+            }
         }
         if (soon.isNotEmpty()) {
-            item { SectionLabel("即将到期") }
-            items(soon, key = { it.notificationId }) { ReminderRow(it) }
+            item { SectionHeader("即将到期", soon.size) }
+            items(soon, key = { it.notificationId }) { r ->
+                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = false, modifier = Modifier.animateItem())
+            }
         }
-        if (upcoming.isNotEmpty()) {
-            item { SectionLabel("未来两周") }
-            items(upcoming, key = { it.first.id }) { (item, daysLeft) ->
-                val cat = Categories.default(item.categoryId)
-                ItemRow(emoji = cat.emoji, name = item.name,
-                    trailing = "$daysLeft 天后到期",
-                    danger = daysLeft <= 3)
+        if (attention.isNotEmpty()) {
+            item { SectionHeader("需要关注", attention.size) }
+            items(attention, key = { it.notificationId }) { r ->
+                ReminderCard(r = r, vm = vm, onEdit = onEdit, showActions = false, modifier = Modifier.animateItem())
             }
         }
         item { Spacer(Modifier.width(1.dp).padding(bottom = 12.dp)) }
     }
 }
 
+/** Hero 卡：三列 displaySmall 统计 + 空日安好事案 */
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 8.dp))
+private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+        ) {
+            HeroStat(pending.toString(), "待处理")
+            HeroStat(upcoming.toString(), "两周内")
+            HeroStat(total.toString(), "全部")
+        }
+        if (pending == 0) {
+            Text(
+                "今天一切安好 ✨",
+                Modifier.padding(start = 24.dp, bottom = 20.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable
-private fun ReminderRow(reminder: Reminder) {
-    val item = reminder.item
-    val cat = Categories.default(item.categoryId)
-    val text = when (reminder.status) {
-        DueStatus.DUE_SOON -> "还有 ${reminder.daysLeft} 天到期"
-        DueStatus.DUE_TODAY -> "今天到期"
-        DueStatus.OVERDUE -> "已过期 ${reminder.overdueDays} 天"
-        DueStatus.LOW_STOCK -> "库存不足（剩 ${item.quantity?.toInt()} ${item.unit ?: ""}）"
-        DueStatus.RENEWAL_SOON -> "还有 ${reminder.daysLeft} 天扣费"
-        DueStatus.RENEWAL_TODAY -> "今天扣费"
+private fun HeroStat(value: String, label: String) {
+    Column {
+        Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
-    ItemRow(emoji = cat.emoji, name = item.name, trailing = text,
-        danger = reminder.status == DueStatus.OVERDUE || reminder.status == DueStatus.DUE_TODAY)
+}
+
+/** reminder 卡：ItemCard + DueRing（LOW_STOCK 无天数传 null）；紧急组下方 AnimatedVisibility 动作行 */
+@Composable
+private fun ReminderCard(
+    r: Reminder,
+    vm: ItemsViewModel,
+    onEdit: (String) -> Unit,
+    showActions: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val item = r.item
+    val cat = Categories.default(item.categoryId)
+    Column(modifier.fillMaxWidth()) {
+        ItemCard(
+            item = item,
+            icon = ReminderEngine.displayIcon(item, cat.emoji),
+            tone = StatusTone(r.status),
+            onClick = { onEdit(item.id) },
+            onLongClick = { onEdit(item.id) },
+        ) {
+            DueRing(daysLeft = if (r.status == DueStatus.LOW_STOCK) null else r.daysLeft)
+        }
+        AnimatedVisibility(
+            visible = showActions,
+            enter = expandVertically(),
+            exit = shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AssistChip(onClick = { vm.rollForward(item.id) }, label = { Text("🍽 续期") })
+                AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
+                AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
+            }
+        }
+    }
 }
 
 @Composable
