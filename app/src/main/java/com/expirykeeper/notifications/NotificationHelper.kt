@@ -53,13 +53,13 @@ object NotificationHelper {
         manager.createNotificationChannelGroup(
             NotificationChannelGroup(CHANNEL_GROUP_ID, CHANNEL_GROUP_NAME)
         )
-        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "到期提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    group = CHANNEL_GROUP_ID
-                }
-            )
-        }
+        // createNotificationChannel 幂等；对既有渠道重新下发可更新其 group（regroup-on-update 合法），
+        // 让已安装但未带 group 的开发设备渠道也归入 "household" 组
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "到期提醒", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                group = CHANNEL_GROUP_ID
+            }
+        )
     }
 
     fun notifyAll(context: Context, reminders: List<Reminder>) {
@@ -115,6 +115,10 @@ object NotificationHelper {
                     .setAutoCancel(true)
                     .build()
             )
+        } else {
+            // 单条时若遗留上一轮的组摘要（如从 2 件处理剩 1 件），主动撤销避免「2 件事」滞留；
+            // 每条处理路径最终都收敛到 runNow→notifyAll，故只需在此唯一 owner 处兜底清理
+            manager.cancel(SUMMARY_ID)
         }
     }
 

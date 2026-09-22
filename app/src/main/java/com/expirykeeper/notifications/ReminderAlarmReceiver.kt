@@ -29,6 +29,8 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 try {
                     app.container.repository.snooze(itemId, 3, LocalDate.now())
                     NotificationHelper.cancel(context, notifId)
+                    // 同物品可能有多个日期变体的通知并存，一并清扫兄弟通知
+                    NotificationHelper.cancelItem(context, itemId)
                     ReminderScheduler.runNow(context)
                 } finally {
                     pending.finish()
