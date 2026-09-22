@@ -34,9 +34,9 @@ interface ItemDao {
     @Query("UPDATE items SET expireAtEpochDay = :epochDay, updatedAt = :now, lastModifiedBy = :deviceId WHERE id = :id")
     suspend fun setExpire(id: String, epochDay: Long, now: Long, deviceId: String)
 
-    @Query("UPDATE items SET handledAtEpochDay = :day, handledStatus = :status, updatedAt = :now WHERE id = :id")
-    suspend fun setHandled(id: String, status: String, day: Long, now: Long)
+    @Query("UPDATE items SET handledAtEpochDay = :day, handledStatus = :status, updatedAt = :now, lastModifiedBy = :deviceId WHERE id = :id")
+    suspend fun setHandled(id: String, status: String, day: Long, now: Long, deviceId: String)
 
-    @Query("UPDATE items SET snoozedUntilEpochDay = :until, handledAtEpochDay = NULL, handledStatus = NULL, updatedAt = :now WHERE id = :id")
-    suspend fun setSnoozedUntil(id: String, until: Long, now: Long)
+    @Query("UPDATE items SET snoozedUntilEpochDay = :until, handledAtEpochDay = NULL, handledStatus = NULL, updatedAt = :now, lastModifiedBy = :deviceId WHERE id = :id")
+    suspend fun setSnoozedUntil(id: String, until: Long, now: Long, deviceId: String)
 }

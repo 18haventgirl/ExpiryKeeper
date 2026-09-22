@@ -63,14 +63,14 @@ class ItemRepository(
 
     suspend fun markHandled(id: String, status: String, today: java.time.LocalDate) {
         val now = System.currentTimeMillis()
-        itemDao.setHandled(id, status, today.toEpochDay(), now)
+        itemDao.setHandled(id, status, today.toEpochDay(), now, deviceId)
         changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
         eventDao.insert(ItemEvent(itemId = id, kind = "handle", epochDay = today.toEpochDay()))
     }
 
     suspend fun snooze(id: String, days: Int, today: java.time.LocalDate) {
         val now = System.currentTimeMillis()
-        itemDao.setSnoozedUntil(id, today.toEpochDay() + days, now)
+        itemDao.setSnoozedUntil(id, today.toEpochDay() + days, now, deviceId)
         changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
         eventDao.insert(ItemEvent(itemId = id, kind = "snooze", epochDay = today.toEpochDay()))
     }
