@@ -40,10 +40,37 @@ object Backup {
             .put("count", items.size).put("items", arr).toString(2)
     }
 
-    private fun JSONObject.optLongOrNull(k: String) = if (isNull(k)) null else optLong(k)
+    /**
+     * 严格选填数值读取（C2）：缺失/JSON null → null；非数字垃圾不再被 optLong 静默折成 0；
+     * 负值一律拒绝——时间戳与 epoch-day 在本域内没有合法负值（epoch-day 负数 = 1970 年前）。
+     */
+    private fun JSONObject.optLongOrNull(k: String): Long? {
+        val raw = opt(k)
+        if (raw == null || raw === JSONObject.NULL) return null
+        val v = when (raw) {
+            is Number -> raw.toLong()
+            is String -> raw.trim().toLongOrNull()
+            else -> null
+        } ?: throw BackupFormatException("字段 $k 不是合法数字")
+        if (v < 0) throw BackupFormatException("字段 $k 不能为负数")
+        return v
+    }
+
+    /** 必填时间戳（createdAt/updatedAt）：缺失或非法同样整单拒绝，绝不静默取 0 */
+    private fun JSONObject.reqLong(k: String): Long =
+        optLongOrNull(k) ?: throw BackupFormatException("缺少必填字段 $k")
+
     private fun JSONObject.optIntOrNull(k: String) = if (isNull(k)) null else optInt(k)
     private fun JSONObject.optDoubleOrNull(k: String) = if (isNull(k)) null else optDouble(k)
     private fun JSONObject.optStringOrNull(k: String) = if (isNull(k)) null else optString(k)
+
+    /** 未知 reminderKind（拼写错误/外来版本）拒绝而非回退 EXPIRY */
+    private fun JSONObject.reminderKindField(k: String): ReminderKind =
+        try {
+            ReminderKind.valueOf(getString(k))
+        } catch (e: IllegalArgumentException) {
+            throw BackupFormatException("字段 $k 不是已知提醒类型")
+        }
 
     /** 全量解析成功才返回；任何结构性垃圾抛 BackupFormatException，调用方据此实现"整文件先校验后写入" */
     fun parse(json: String): List<Item> {
@@ -57,7 +84,7 @@ object Backup {
                     id = o.getString("id"), name = o.getString("name"), categoryId = o.getString("categoryId"),
                     location = o.optStringOrNull("location"), note = o.optStringOrNull("note"),
                     barcode = o.optStringOrNull("barcode"), emoji = o.optStringOrNull("emoji"),
-                    reminderKind = runCatching { ReminderKind.valueOf(o.getString("reminderKind")) }.getOrDefault(ReminderKind.EXPIRY),
+                    reminderKind = o.reminderKindField("reminderKind"),
                     expireAtEpochDay = o.optLongOrNull("expireAtEpochDay"),
                     reminderOffsetsDays = (o.optStringOrNull("reminderOffsetsDays") ?: "3,0").split(",").mapNotNull { it.trim().toIntOrNull() },
                     quantity = o.optDoubleOrNull("quantity"), unit = o.optStringOrNull("unit"),
@@ -66,7 +93,7 @@ object Backup {
                     openedAtEpochDay = o.optLongOrNull("openedAtEpochDay"), shelfLifeDays = o.optIntOrNull("shelfLifeDays"),
                     handledAtEpochDay = o.optLongOrNull("handledAtEpochDay"), handledStatus = o.optStringOrNull("handledStatus"),
                     snoozedUntilEpochDay = o.optLongOrNull("snoozedUntilEpochDay"),
-                    createdAt = o.optLong("createdAt"), updatedAt = o.optLong("updatedAt"),
+                    createdAt = o.reqLong("createdAt"), updatedAt = o.reqLong("updatedAt"),
                     lastModifiedBy = o.optStringOrNull("lastModifiedBy"), deletedAt = o.optLongOrNull("deletedAt"),
                 )
             }

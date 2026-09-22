@@ -76,7 +76,8 @@ fun TodayScreen(
             )
         }
         item {
-            HeroCard(pending = reminders.size, upcoming = upcoming14.size, total = items.size)
+            // "两周内"只数 0..14 天的未来项；逾期（daysLeft < 0）在"紧急"分组单列，不再重复计入 hero
+            HeroCard(pending = reminders.size, upcoming = upcoming14.count { it.second >= 0L }, total = items.size)
         }
         if (reminders.isEmpty()) {
             item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }

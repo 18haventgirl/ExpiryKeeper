@@ -5,9 +5,7 @@ import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.ExpiryForm
 import com.expirykeeper.core.domain.ExpiryFormMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExpiryFormTest {
@@ -58,13 +56,5 @@ class ExpiryFormTest {
         assertNull(ExpiryForm.parseDays("abc"))
         assertNull(ExpiryForm.parseDays("2.5"))
         assertNull(ExpiryForm.parseDays(""))
-    }
-
-    @Test fun `hasValidExpiry requires the selected mode to be complete`() {
-        assertTrue(ExpiryForm.hasValidExpiry(ExpiryFormMode.DATE, 200L, null, null))
-        assertFalse(ExpiryForm.hasValidExpiry(ExpiryFormMode.DATE, null, 100L, 3))
-        assertTrue(ExpiryForm.hasValidExpiry(ExpiryFormMode.OPENED, null, 100L, 3))
-        assertFalse(ExpiryForm.hasValidExpiry(ExpiryFormMode.OPENED, null, 100L, null))
-        assertFalse(ExpiryForm.hasValidExpiry(ExpiryFormMode.OPENED, 200L, null, null))
     }
 }

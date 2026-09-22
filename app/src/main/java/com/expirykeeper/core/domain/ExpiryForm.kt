@@ -30,11 +30,4 @@ object ExpiryForm {
 
     /** 自定义天数文本 → 合法整数或 null（非数字/越界一律 null，由 UI 显示行内错误） */
     fun parseDays(text: String): Int? = text.trim().toIntOrNull()?.takeIf { it in ShelfLifeRange }
-
-    /** 切换后是否属于"两模式之一已有有效值"（保存前置校验） */
-    fun hasValidExpiry(mode: ExpiryFormMode, expireAtEpochDay: Long?, openedAtEpochDay: Long?, shelfLifeDays: Int?): Boolean =
-        when (mode) {
-            ExpiryFormMode.DATE -> expireAtEpochDay != null
-            ExpiryFormMode.OPENED -> openedAtEpochDay != null && shelfLifeDays != null
-        }
 }

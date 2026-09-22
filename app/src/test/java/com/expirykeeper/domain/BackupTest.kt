@@ -33,4 +33,27 @@ class BackupTest {
         assertThrows(BackupFormatException::class.java) { Backup.parse("{oops") }
         assertThrows(BackupFormatException::class.java) { Backup.toJson(listOf(Item(id = "x", name = "n", categoryId = "c").copy(updatedAt = -5))) }
     }
+
+    /** C2：全有或全无契约——单条垃圾字段必须整文件拒绝，不得静默降级 */
+    private fun envelope(item: String) = """{"formatVersion":1,"count":1,"items":[$item]}"""
+
+    @Test fun missingUpdatedAtRejected() {
+        // 缺 updatedAt：optLong 旧行为静默给 0（LWW 下永输），必须拒
+        val json = envelope("""{"id":"a","name":"n","categoryId":"c","reminderKind":"EXPIRY","createdAt":100}""")
+        assertThrows(BackupFormatException::class.java) { Backup.parse(json) }
+    }
+
+    @Test fun unknownReminderKindRejected() {
+        // 拼错的 reminderKind 旧行为回退 EXPIRY（数据被悄悄改类），必须拒
+        val json = envelope("""{"id":"a","name":"n","categoryId":"c","reminderKind":"BOGUS","createdAt":100,"updatedAt":200}""")
+        assertThrows(BackupFormatException::class.java) { Backup.parse(json) }
+    }
+
+    @Test fun negativeTimestampRejected() {
+        // 负时间戳/负 epoch-day 一律拒（updatedAt=-1 与负 expireAtEpochDay 各验一条）
+        val badStamp = envelope("""{"id":"a","name":"n","categoryId":"c","reminderKind":"EXPIRY","createdAt":100,"updatedAt":-1}""")
+        assertThrows(BackupFormatException::class.java) { Backup.parse(badStamp) }
+        val badEpochDay = envelope("""{"id":"a","name":"n","categoryId":"c","reminderKind":"EXPIRY","expireAtEpochDay":-7,"createdAt":100,"updatedAt":200}""")
+        assertThrows(BackupFormatException::class.java) { Backup.parse(badEpochDay) }
+    }
 }

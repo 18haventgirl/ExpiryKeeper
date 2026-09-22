@@ -16,6 +16,10 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE deletedAt IS NULL")
     suspend fun getAll(): List<Item>
 
+    /** 含墓碑行的全量读取：备份恢复 / 同步合并的存在性判定必须看见墓碑，否则本地已删项会被复活 */
+    @Query("SELECT * FROM items")
+    suspend fun getAllIncludingTombstones(): List<Item>
+
     @Query("SELECT * FROM items WHERE id = :id")
     suspend fun getById(id: String): Item?
 

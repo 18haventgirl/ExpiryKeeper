@@ -10,9 +10,4 @@ class AppPrefs(context: Context) {
     var dynamicColor: Boolean
         get() = p.getBoolean("dynamicColor", true)
         set(v) = p.edit().putBoolean("dynamicColor", v).apply()
-
-    /** 每日提醒时间 "HH:mm"（预留，Task 12 通知 v2 接入） */
-    var notificationTime: String
-        get() = p.getString("notificationTime", "09:00") ?: "09:00"
-        set(v) = p.edit().putString("notificationTime", v).apply()
 }

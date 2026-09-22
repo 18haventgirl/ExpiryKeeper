@@ -42,8 +42,12 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val today: LocalDate get() = LocalDate.now()
 
-    /** 一次性 Snackbar 事件流（EkApp 顶层 Scaffold 消费）；extraBuffer 防无订阅瞬丢 */
-    private val _snackbar = MutableSharedFlow<SnackbarMsg>(extraBufferCapacity = 4)
+    /**
+     * 一次性 Snackbar 事件流（EkApp 顶层 Scaffold 消费）；extraBuffer 防无订阅瞬丢。
+     * I-2：replay=1 让"删除可撤销"这条最后消息能穿过配置变更/重订阅窗口——
+     * deleteWithUndo 的撤销动作闭包随消息一起驻留，UI 重建后新订阅者仍会收到并可点撤销。
+     */
+    private val _snackbar = MutableSharedFlow<SnackbarMsg>(replay = 1, extraBufferCapacity = 4)
     val snackbar: SharedFlow<SnackbarMsg> = _snackbar.asSharedFlow()
 
     val items: StateFlow<List<Item>> = repo.observeAll()
@@ -87,11 +91,6 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         ReminderScheduler.runNow(getApplication())
     }
 
-    fun delete(id: String) = viewModelScope.launch {
-        repo.softDelete(id)
-        ReminderScheduler.runNow(getApplication())
-    }
-
     /** 详情屏删除：软删 + 撤消退路；撤销走 repo.save（updatedAt 刷新 → 大于墓碑，重新可见） */
     fun deleteWithUndo(id: String) = viewModelScope.launch {
         val original = repo.getById(id) ?: return@launch
@@ -118,14 +117,10 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     /** 设置概览：30 天续期(roll)次数 */
     suspend fun rollCount30d(): Int = repo.rollCount30d()
 
-    /** 动态取色开关：读即时值；写 prefs 后由 UI 触发 activity recreate 生效 */
-    val dynamicColorEnabled: Boolean get() = prefs.dynamicColor
-
+    /** 动态取色开关：写 prefs 后由 UI 触发 activity recreate 生效（读侧 UI 直接取 prefs.dynamicColor） */
     fun setDynamicColor(value: Boolean) {
         prefs.dynamicColor = value
     }
-
-    fun consumeOne(id: String) = viewModelScope.launch { repo.consumeOne(id) }
 
     /** 快速操作·续期：按保质期/周期滚期；无法推导只 Toast 提示去编辑（Task 11 前有 snackbar 再升级） */
     fun rollForward(id: String) = viewModelScope.launch {
@@ -143,7 +138,7 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         ReminderScheduler.runNow(getApplication())
     }
 
-    /** 快速操作·稍后 3 天：snooze 截止日写 today+3，引擎期间静默；cancelItem 兜底清掉旧日期变体的通知 */
+    /** 快速操作·稍后 3 天：静默今天~+2、第 3 天(+3)恢复提醒；cancelItem 兜底清掉旧日期变体的通知 */
     fun snooze3(r: Reminder) = viewModelScope.launch {
         repo.snooze(r.item.id, 3, today)
         NotificationHelper.cancelItem(getApplication(), r.item.id)

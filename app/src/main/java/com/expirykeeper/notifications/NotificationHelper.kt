@@ -65,6 +65,14 @@ object NotificationHelper {
     fun notifyAll(context: Context, reminders: List<Reminder>) {
         ensureChannel(context)
         val manager = context.getSystemService(NotificationManager::class.java)
+        // I-1 陈旧子通知清扫：本轮之前的活动通知里，凡属本提醒渠道、且不在本轮待办集合
+        // （含组摘要 SUMMARY_ID）的一律取消——处理到只剩 1 件或清空时，落单的旧子通知不再滞留。
+        // notifIdFor 是纯哈希无法反查全集，故以系统活动通知列表为准；cancelAll 会误伤前台/其它
+        // 通知，绝不使用。
+        val keepIds = reminders.map { it.notificationId }.toHashSet().apply { add(SUMMARY_ID) }
+        manager.activeNotifications.forEach { act ->
+            if (act.notification?.channelId == CHANNEL_ID && act.id !in keepIds) manager.cancel(act.id)
+        }
         val grouped = reminders.size > 1 // 单条不挂组机制，避免摘要闪烁
         reminders.forEach { reminder ->
             val pi = PendingIntent.getActivity(

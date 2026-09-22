@@ -127,7 +127,12 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             else -> null
         }
         ReminderKind.CONSUMABLE -> qtyErr ?: thresholdErr
-        ReminderKind.RECURRING -> if (nextDueDate == null) "请选择下次扣费日期" else null
+        // I-4：无效/未选周期走行内错误（与保质期同法），不再在 buildItem 里静默回退旧值
+        ReminderKind.RECURRING -> when {
+            nextDueDate == null -> "请选择下次扣费日期"
+            recurrence == null -> "请选择或输入续费周期（1~3650 天）"
+            else -> null
+        }
     }
     val valid = nameErr == null && ruleErr == null && !shelfInvalid
 
@@ -160,17 +165,27 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             unit = unit.trim().ifBlank { null },
             lowStockThreshold = threshold.toDoubleOrNull(),
         )
+        // I-3b：按目标 reminderKind 重建，显式清空其他 kind 的专属字段，
+        // 使"编辑换类"落库形态与新建同 kind 一致（新建默认全 null），不携带原 kind 脏值。
+        // quantity/unit/lowStockThreshold 恒由 CONSUMABLE 表单文本派生（非该类时为空→null），无需再清。
         return when (cat.reminderKind) {
             // 互斥清理走 ExpiryForm：换模式即清空另一侧字段，到期日派生留给 repo.save
-            ReminderKind.EXPIRY -> when (expiryMode) {
-                ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
-                ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
+            ReminderKind.EXPIRY -> {
+                val expiry = when (expiryMode) {
+                    ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
+                    ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
+                }
+                expiry.copy(nextDueAtEpochDay = null, recurrenceDays = null)
             }
             ReminderKind.RECURRING -> item.copy(
                 nextDueAtEpochDay = nextDueDate?.toEpochDay(),
-                recurrenceDays = recurrence ?: item.recurrenceDays,
+                recurrenceDays = recurrence, // I-4：无静默回退；invalid/未选时按钮已被 ruleErr 禁用
+                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
             )
-            ReminderKind.CONSUMABLE -> item
+            ReminderKind.CONSUMABLE -> item.copy(
+                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
+                nextDueAtEpochDay = null, recurrenceDays = null,
+            )
         }
     }
 
