@@ -18,7 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.expirykeeper.core.data.Categories
@@ -51,8 +52,8 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     val visible by vm.visibleItems.collectAsStateWithLifecycle()
     val query by vm.filterQuery.collectAsStateWithLifecycle()
     val sort by vm.sortOrder.collectAsStateWithLifecycle()
-    var searchActive by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     val today = LocalDate.now()
 
     Column(
@@ -86,15 +87,17 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                 }
             },
         )
-        SearchBar(
+        // 不展开的搜索输入框：下方列表本身实时过滤，展开式 SearchBar 的结果槽位是空的，
+        // 会把已过滤出的结果盖住（SearchBar 收起态还会把状态栏 inset 再垫一遍）
+        SearchBarDefaults.InputField(
             query = query,
             onQueryChange = { vm.filterQuery.value = it },
-            onSearch = { searchActive = false },
-            active = searchActive,
-            onActiveChange = { searchActive = it },
+            onSearch = { focusManager.clearFocus() },
+            expanded = false,
+            onExpandedChange = {},
             placeholder = { Text("搜索名称 / 备注 / 位置") },
             modifier = Modifier.fillMaxWidth(),
-        ) {}
+        )
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
