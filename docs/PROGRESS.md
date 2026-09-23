@@ -41,6 +41,7 @@
 - 冷启动冒烟：`install -r` → force-stop → 冷启 → `topResumedActivity=com.expirykeeper/.MainActivity`，进程存活无崩溃；间隔 30s 两次 screencap 均为 1080×2424 非黑屏、渲染今日 v2 真实界面
 - 泄漏粗检：`dumpsys meminfo` 两次采样（中间一次 HOME→重开切应用）TOTAL PSS ≈113MB、Native Heap 13.1→13.5MB（增幅 <20%），无增长趋势
 - 全分支终审（v2 收尾）：review 38df8b9..1b1e106 → 修复波 093a1c0（13 文件）：importMerged 墓碑可见（防删除复活）、Backup.parse 严格化（缺时间戳/非法枚举/负值一律拒绝，+3 拒绝测试）、通知残留清扫、撤销 Snackbar replay=1、两周计数排除逾期、跨类型字段清理、续费周期内联校验、死代码清扫、snooze 边界修正、MigrationTest 改 JUnit 断言；复审判定 ADDRESSED
+- 切页割裂感修复（2026-09-23，`297626d`）：用 uiautomator 逐页取 bounds 定位根因——① BigHeader 返回键与标题同行，把 displaySmall 标题在设置/添加页挤右 ~48dp（今日/清单贴左），改为返回键独立成行（M3 大标题式），各页标题左缘统一 x=42；② 页面横向边距 12dp（今日/清单/设置）与 16dp（添加）不一，全部统一 16dp；③ 设置页在 EkApp Scaffold 内又套一层 Scaffold，双吃系统栏 inset 使内容下沉，去掉内层；④ Hero 卡内边距 24dp 与列表卡 16dp 不齐，统一 16dp；⑤ 条目 emoji 26sp 撑出 44dp 圆底，降到 22sp；⑥ MainActivity 每次冷启都请求通知权限，已授权时回调触发 runNow→notifyAll 把用户刚滑掉的通知复活——改为仅未授权时请求。32/32 单测 + lint 0 error 复验通过
 - 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ 备份不携带墓碑 → 恢复不复活删除，M3 WebDAV 同步需导出墓碑；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）。M2 条码、M3 同步仍为未来里程碑
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
