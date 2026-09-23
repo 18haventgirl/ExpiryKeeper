@@ -111,11 +111,22 @@
 - [x] A3 表单校验加 revealed 门槛（保存点击后揭示）
 - [x] B4 暴露 `isLoading`，加载中不再用空集合冒充空态；编辑页去白闪
 
-### 第 2 批 · 结构性 P0（A1 A2 A5）
-- [ ] A1 详情浮层改覆盖路由（底下继续渲染来路屏）+ 两屏各自保留滚动位置
-- [ ] A2 add/settings/detail 路由隐藏 bottomBar
-- [ ] A5 尾部槽位语义分离：状态胶囊与数量分栏，无数量时降级显示
-- [ ] B13 统一 edge-to-edge 与 inset 策略
+### 第 2 批 · 结构性 P0（A1 A2 A5 B13）✅ 已完成
+
+**裁决记录**
+
+- **A1 走过一条弯路**：先用 navigation-compose 的 `dialog("detail/{id}")` 路由（2.10.1 确有此 API，`NavHost` 内部自动挂 `DialogHost`）。清单确实透出来了，但实测透过率 **0.27 = 0.32(sheet scrim) × 0.60(dialog 窗口 dim)** —— 双重压暗，背景糊成一片。而 Compose UI **1.12.1 的 `DialogProperties` 根本没有 `dimAmount`**（只有 dismissOnBackPress/dismissOnClickOutside/usePlatformDefaultWidth/securePolicy/decorFitsSystemWindows/windowTitle/windowType/windowToken），窗口那层 dim 关不掉。最终改为**在 `EkApp` 根 Box 里、Scaffold 之上渲染 `DetailSheet`**：只剩 `ModalBottomSheet` 自己那层 32% scrim（正是 M3 规范值），底栏连同内容一起被压暗，来路屏永不离开组合。`detail/{id}` 路由与 `navArgument`/`NavType` 相关分支随之删除。
+- **A2**：`chromeVisible = currentRoute == "today" || "list"` 统一驱动 bottomBar 与 FAB（顺带取代原来那串三重否定）。
+- **A5**：尾部槽位只表达「到期」一件事 —— 有提醒→状态胶囊；无提醒但有到期日→`daysCaption` 相对天数；两者皆无→留空。数量+单位移入副标题（`ItemCard` 新增可选 `detail` 覆盖参数）。**过程中发现 `effectiveExpireDay` 不覆盖 RECURRING**，导致订阅类物品尾部空着：抽出 `ReminderEngine.dueDayOf(item)` 按类型取日子，`upcoming()` 与清单共用（消掉一份重复、补一个测试）。
+- **B13**：`MainActivity` 显式 `enableEdgeToEdge()`（targetSdk 37 平台本就强制，显式调用才能由 SystemBarStyle 接管图标配色）。
+- 顺手：`ItemCard` 标题/副标题补 `overflow = TextOverflow.Ellipsis`（B9 的子项，防半字截断）。
+
+**验证**：47 单测全绿、lint 0 error。设备实测：浮层遮罩区透过率 0.68（单层 32%）、清单内容 **309 色**透出（修复前 1 色）；一次 BACK 即关闭浮层（`最近记录` 计数 1→0）且 items 仍 6 条无误删；添加页底栏消失、保存键完整落在 y=2307-2360（修复前被裁到只剩 26px）、首帧无红字且按钮不再是不可读的灰态；面霜「剩 6 天」、LED灯泡「剩 21 天」、视频会员「剩 2 天」、猫粮「1.2 kg」回到副标题。
+
+- [x] A1 详情浮层改根层覆盖渲染（含 `dialog()` 方案的否决记录）
+- [x] A2 add/settings 隐藏 bottomBar 与 FAB
+- [x] A5 尾部语义分离 + `dueDayOf` 抽取
+- [x] B13 edge-to-edge 显式化
 
 ### 第 3 批 · 质感（B1 B2 B3 B5 B6 B7 B8 B9 B10 B11 B12 B15 B16 B17 B18）
 - [ ] B1 tonal surface 层级（页面降一档或卡片改描边）

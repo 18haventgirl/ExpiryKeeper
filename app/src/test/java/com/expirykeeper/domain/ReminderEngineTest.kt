@@ -4,6 +4,7 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.ringSpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -176,5 +177,24 @@ class ReminderEngineTest {
             listOf(far to 30L, overdue to -2L, todayItem to 0L), withinDays = 14,
         )
         assertTrue(soon.isEmpty())
+    }
+
+    // ---- A5 清单尾部相对天数文案（替代光秃秃的「—」） ----
+
+    @Test fun daysCaptionNamesTheActualDistance() {
+        assertEquals("逾 3 天", daysCaption(-3))
+        assertEquals("今天", daysCaption(0))
+        assertEquals("剩 6 天", daysCaption(6))
+    }
+
+    @Test fun dueDayFollowsReminderKind() {
+        val expiry = expiryItem(5, listOf(3, 0))
+        assertEquals(epoch + 5, ReminderEngine.dueDayOf(expiry))
+        val recurring = Item(id = "r9", name = "视频会员", categoryId = "subscription",
+            reminderKind = ReminderKind.RECURRING, nextDueAtEpochDay = epoch + 2, reminderOffsetsDays = listOf(3, 0))
+        assertEquals(epoch + 2, ReminderEngine.dueDayOf(recurring))
+        val consumable = Item(id = "c9", name = "猫粮", categoryId = "pet",
+            reminderKind = ReminderKind.CONSUMABLE, quantity = 1.2, lowStockThreshold = 2.0)
+        assertNull(ReminderEngine.dueDayOf(consumable))
     }
 }

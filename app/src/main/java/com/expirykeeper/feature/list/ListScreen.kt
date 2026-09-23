@@ -33,6 +33,7 @@ import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemSort
+import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.ui.designsystem.BigHeader
@@ -141,11 +142,12 @@ private fun groupedCategories(
     return known + unknown
 }
 
-/** 单行卡：状态胶囊（有提醒）或数量文本（无提醒）；点击/长按 → 详情浮层（Task 11） */
+/** 单行卡：尾部只说「到期」这一件事，数量进副标题（修 A5：不再混用状态胶囊与光秃「—」） */
 @Composable
 private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
     val cat = Categories.default(item.categoryId)
     val reminder = ReminderEngine.computeOne(item, today)
+    val expireDay = ReminderEngine.dueDayOf(item)
     ItemCard(
         item = item,
         icon = ReminderEngine.displayIcon(item, cat.emoji),
@@ -154,14 +156,17 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
         } else {
             Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         },
+        detail = listOfNotNull(
+            item.location ?: item.note,
+            quantityLabel(item),
+        ).joinToString(" · ").takeIf { it.isNotEmpty() },
         onClick = { onDetail(item.id) },
         onLongClick = { onDetail(item.id) },
     ) {
-        if (reminder != null) {
-            StatusPill(reminder.status, reminder.status.labelZh)
-        } else {
-            Text(
-                quantityText(item),
+        when {
+            reminder != null -> StatusPill(reminder.status, reminder.status.labelZh)
+            expireDay != null -> Text(
+                daysCaption(expireDay - today.toEpochDay()),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -169,10 +174,11 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
     }
 }
 
-private fun quantityText(item: Item): String {
-    val q = item.quantity ?: return "—"
+/** 数量 + 单位；无库存语义返回 null，交由副标题合并展示 */
+private fun quantityLabel(item: Item): String? {
+    val q = item.quantity ?: return null
     val num = if (q % 1.0 == 0.0) q.toInt().toString() else q.toString()
-    return "$num ${item.unit ?: ""}".trim()
+    return "$num ${item.unit ?: ""}".trim().takeIf { it.isNotEmpty() }
 }
 
 private val ItemSort.label: String

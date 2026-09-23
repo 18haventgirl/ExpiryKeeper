@@ -26,6 +26,13 @@ data class Reminder(
     val notificationId: Int,
 )
 
+/** 相对天数中文文案（修 A5：清单尾部不再挂一个看不出意思的「—」） */
+fun daysCaption(daysLeft: Long): String = when {
+    daysLeft < 0 -> "逾 ${-daysLeft} 天"
+    daysLeft == 0L -> "今天"
+    else -> "剩 $daysLeft 天"
+}
+
 /** 到期环显示规格：中心文本 + 弧比例（配色由 UI 侧 StatusTone 决定，不在此重复表达） */
 data class RingSpec(val text: String, val fraction: Float)
 
@@ -98,16 +105,19 @@ object ReminderEngine {
         return Reminder(item, status, daysLeft, 0, notifIdFor(item.id, status, today))
     }
 
+    /** 该物品「下一次该看的日子」：EXPIRY 用到期日（含开封推导），RECURRING 用下次扣费日，CONSUMABLE 无 */
+    fun dueDayOf(item: Item): Long? = when (item.reminderKind) {
+        // Task 4 carry-over：EXPIRY 走派生到期日（开封+保质期），不能只读 raw 字段
+        ReminderKind.EXPIRY -> effectiveExpireDay(item)
+        ReminderKind.RECURRING -> item.nextDueAtEpochDay
+        ReminderKind.CONSUMABLE -> null
+    }
+
     /** 今日 + 未来 withinDays 内的到期摘要（"今日"屏排序用） */
     fun upcoming(items: List<Item>, today: LocalDate, withinDays: Long = 14): List<Pair<Item, Long>> =
         items.filter { it.deletedAt == null }
             .mapNotNull { item ->
-                val epoch = when (item.reminderKind) {
-                    // Task 4 carry-over：EXPIRY 走派生到期日（开封+保质期），不能只读 raw 字段
-                    ReminderKind.EXPIRY -> effectiveExpireDay(item)
-                    ReminderKind.RECURRING -> item.nextDueAtEpochDay
-                    ReminderKind.CONSUMABLE -> null
-                } ?: return@mapNotNull null
+                val epoch = dueDayOf(item) ?: return@mapNotNull null
                 item to (epoch - today.toEpochDay())
             }
             .filter { it.second <= withinDays }
