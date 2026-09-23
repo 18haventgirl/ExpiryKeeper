@@ -52,6 +52,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     val visible by vm.visibleItems.collectAsStateWithLifecycle()
     val query by vm.filterQuery.collectAsStateWithLifecycle()
     val sort by vm.sortOrder.collectAsStateWithLifecycle()
+    val loading by vm.isLoading.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val today = LocalDate.now()
@@ -103,7 +104,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
             contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (visible.isEmpty()) {
+            if (visible.isEmpty() && !loading) {
                 item {
                     if (query.isNotBlank()) {
                         EmptyState("🔍", "没有找到匹配的物品", "换个关键词试试")

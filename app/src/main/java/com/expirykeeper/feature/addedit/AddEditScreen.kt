@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +39,7 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.ExpiryForm
 import com.expirykeeper.core.domain.ExpiryFormMode
+import com.expirykeeper.core.domain.RuleState
 import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
@@ -75,6 +78,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
     var recurrenceText by remember { mutableStateOf("") }
     var moreOpen by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(itemId == null) }
+    var revealed by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId) {
         if (itemId != null) {
@@ -109,7 +113,13 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             loaded = true
         }
     }
-    if (!loaded) return
+    if (!loaded) {
+        // 修 B4：编辑既有物品时不再整页空帧，回填前给一个居中的加载指示
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     val cat = Categories.default(categoryId)
     val shelfLife = if (shelfCustom) ExpiryForm.parseDays(shelfText) else shelfChoice
@@ -119,22 +129,23 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
     val thresholdErr = positiveNumErr(threshold, "低库存线")
 
     val nameErr = if (name.isBlank()) "请填写物品名称" else null
-    val ruleErr = when (cat.reminderKind) {
-        ReminderKind.EXPIRY -> when {
-            expiryMode == ExpiryFormMode.DATE && expireDate == null -> "请选择到期日期"
-            expiryMode == ExpiryFormMode.OPENED && openedDate == null -> "请选择开封日期"
-            expiryMode == ExpiryFormMode.OPENED && shelfLife == null -> "请选择或输入保质期（1~3650 天）"
-            else -> null
-        }
-        ReminderKind.CONSUMABLE -> qtyErr ?: thresholdErr
-        // I-4：无效/未选周期走行内错误（与保质期同法），不再在 buildItem 里静默回退旧值
-        ReminderKind.RECURRING -> when {
-            nextDueDate == null -> "请选择下次扣费日期"
-            recurrence == null -> "请选择或输入续费周期（1~3650 天）"
-            else -> null
-        }
-    }
+    val ruleErr = ExpiryForm.ruleError(
+        RuleState(
+            kind = cat.reminderKind,
+            mode = expiryMode,
+            expireDate = expireDate,
+            openedDate = openedDate,
+            shelfLife = shelfLife,
+            nextDueDate = nextDueDate,
+            recurrence = recurrence,
+            quantityError = qtyErr,
+            thresholdError = thresholdErr,
+        ),
+    )
     val valid = nameErr == null && ruleErr == null && !shelfInvalid
+    // 修 A3：错误文本只在用户按过一次保存后才出现，新建首帧不再满屏红
+    val shownNameErr = nameErr.takeIf { revealed }
+    val shownRuleErr = ruleErr.takeIf { revealed }
 
     fun pickCategory(picked: String) {
         categoryId = picked
@@ -207,13 +218,13 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("物品名称 *") }, isError = nameErr != null, singleLine = true,
+                    label = { Text("物品名称 *") }, isError = shownNameErr != null, singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(12.dp))
                 EmojiIconButton(display = emoji ?: cat.emoji) { showEmojiSheet = true }
             }
-            ErrorLine(nameErr)
+            ErrorLine(shownNameErr)
             Text("点右侧图标可自选 emoji，默认跟随品类", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -255,7 +266,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
                     onTextChange = { recurrenceText = it },
                 )
             }
-            ErrorLine(ruleErr)
+            ErrorLine(shownRuleErr)
         }
 
         FormCard("更多设置") {
@@ -286,8 +297,15 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(enabled = valid, onClick = { vm.save(buildItem()); onDone() },
-                modifier = Modifier.weight(1f)) {
+            // 保存不置灰：无效时点一次即揭示缺什么（修 A3，同时消掉不可读的禁用态文字）
+            Button(onClick = {
+                if (valid) {
+                    vm.save(buildItem())
+                    onDone()
+                } else {
+                    revealed = true
+                }
+            }, modifier = Modifier.weight(1f)) {
                 Text(if (editing == null) "保存" else "更新")
             }
             // 删除入口唯一在详情浮层（Task 11：deleteWithUndo 可撤销），此处不再提供

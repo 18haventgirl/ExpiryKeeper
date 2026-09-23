@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.RingSpec
 
 /** 状态色对：容器色 + 内容色（取代 Pair，字段名自解释） */
 data class Tone(val container: Color, val content: Color)
@@ -79,14 +80,18 @@ fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) 
 }
 
 /**
- * 到期环：14 天满环 → 0 天空环。Canvas 只画弧，中心数字用 Box 叠层 Text；
- * daysLeft == null 渲染居中 "·" 占位（LOW_STOCK 等无天数场景）。
+ * 到期环：只渲染 `ringSpec` 算出的文本与弧，配色跟随状态 tone。
+ * 修 A4：此前恒用 primary + daysLeft/14，逾期与「今天到期」长得一模一样。
+ * 文本超过两位时降字号，避免 44dp 圆内裁字（如逾期 200 天）。
  */
 @Composable
-fun DueRing(daysLeft: Long?, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+fun DueRing(spec: RingSpec, tone: Tone, size: Dp = 44.dp, modifier: Modifier = Modifier) {
     val track = MaterialTheme.colorScheme.surfaceVariant
-    val progress = MaterialTheme.colorScheme.primary
-    val dotColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val textStyle = if (spec.text.length <= 2) {
+        MaterialTheme.typography.headlineSmall
+    } else {
+        MaterialTheme.typography.labelLarge
+    }
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(size)) {
             // 注意：此处 size 被 DrawScope.size 遮蔽，取 Dp 参数用外层 ringPx
@@ -99,20 +104,15 @@ fun DueRing(daysLeft: Long?, size: Dp = 44.dp, modifier: Modifier = Modifier) {
                 topLeft = topLeft, size = arcSize,
                 style = Stroke(width = strokeW, cap = StrokeCap.Round),
             )
-            if (daysLeft != null) {
-                val fraction = daysLeft.coerceIn(0L, 14L) / 14f
+            if (spec.fraction > 0f) {
                 drawArc(
-                    color = progress, startAngle = -90f, sweepAngle = 360f * fraction,
+                    color = tone.content, startAngle = -90f, sweepAngle = 360f * spec.fraction,
                     useCenter = false, topLeft = topLeft, size = arcSize,
                     style = Stroke(width = strokeW, cap = StrokeCap.Round),
                 )
             }
         }
-        Text(
-            text = daysLeft?.toString() ?: "·",
-            style = MaterialTheme.typography.headlineSmall,
-            color = if (daysLeft == null) dotColor else MaterialTheme.colorScheme.onSurface,
-        )
+        Text(spec.text, style = textStyle, color = tone.content)
     }
 }
 

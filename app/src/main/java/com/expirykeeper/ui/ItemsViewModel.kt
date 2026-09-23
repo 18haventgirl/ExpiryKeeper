@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,7 +52,15 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     private val _snackbar = MutableSharedFlow<SnackbarMsg>(replay = 1, extraBufferCapacity = 4)
     val snackbar: SharedFlow<SnackbarMsg> = _snackbar.asSharedFlow()
 
+    /**
+     * Room 首包是否已到。修 B4：items 的初值是 emptyList，加载中的那一帧与「真没有数据」
+     * 长得一样，UI 会先闪一次「还没有物品」。首包到达后恒为 true。
+     */
+    private val _loaded = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _loaded.asStateFlow()
+
     val items: StateFlow<List<Item>> = repo.observeAll()
+        .onEach { _loaded.value = true }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 今日应提醒的条目（引擎 computeForDate 快照） */

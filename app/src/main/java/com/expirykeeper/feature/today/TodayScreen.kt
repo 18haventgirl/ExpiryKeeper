@@ -29,9 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.expirykeeper.core.data.Categories
+import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.domain.DueStatus
-import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.RingSpec
+import com.expirykeeper.core.domain.ringSpec
 import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.core.ui.designsystem.DueRing
 import com.expirykeeper.core.ui.designsystem.EmptyState
@@ -52,12 +54,15 @@ fun TodayScreen(
     val items by vm.items.collectAsStateWithLifecycle()
     val reminders by vm.reminders.collectAsStateWithLifecycle()
     val upcoming14 by vm.upcoming14.collectAsStateWithLifecycle()
+    val loading by vm.isLoading.collectAsStateWithLifecycle()
     val today = LocalDate.now()
 
-    // 分组（controller ruling 8）：紧急=OVERDUE+DUE_TODAY，即将到期=DUE_SOON+RENEWAL_SOON，需要关注=LOW_STOCK+RENEWAL_TODAY
+    // 分组（修 A6）：紧急/需要关注来自引擎提醒；「即将到期」按 1..14 天区间取，与 hero 同一口径。
+    // 引擎的 DUE_SOON 只在命中偏移日时触发（通知不该天天发），所以它不能充当列表数据源。
     val urgent = reminders.filter { it.status == DueStatus.OVERDUE || it.status == DueStatus.DUE_TODAY }
-    val soon = reminders.filter { it.status == DueStatus.DUE_SOON || it.status == DueStatus.RENEWAL_SOON }
     val attention = reminders.filter { it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
+    val soon = ReminderEngine.soonSection(upcoming14, withinDays = 14L)
+    val rowCount = urgent.size + soon.size + attention.size
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -75,28 +80,52 @@ fun TodayScreen(
             )
         }
         item {
-            // "两周内"只数 0..14 天的未来项；逾期（daysLeft < 0）在"紧急"分组单列，不再重复计入 hero
-            HeroCard(pending = reminders.size, upcoming = upcoming14.count { it.second >= 0L }, total = items.size)
+            // 三个数字各自等于本屏可见行数：待处理=全部行，两周内=即将到期行，全部=清单项数
+            HeroCard(pending = rowCount, upcoming = soon.size, total = items.size)
         }
-        if (reminders.isEmpty()) {
+        if (rowCount == 0 && !loading) {
             item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }
         }
         if (urgent.isNotEmpty()) {
             item { SectionHeader("紧急", urgent.size) }
             items(urgent, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = true, modifier = Modifier.animateItem())
+                ReminderCard(
+                    item = r.item,
+                    status = r.status,
+                    spec = ringSpec(r.status, r.daysLeft, r.overdueDays, r.item.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                    showActions = true,
+                    actions = {
+                        AssistChip(onClick = { vm.rollForward(r.item.id) }, label = { Text("🍽 续期") })
+                        AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
+                        AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
+                    },
+                )
             }
         }
         if (soon.isNotEmpty()) {
             item { SectionHeader("即将到期", soon.size) }
-            items(soon, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
+            items(soon, key = { "soon-${it.first.id}" }) { (soonItem, days) ->
+                ReminderCard(
+                    item = soonItem,
+                    status = DueStatus.DUE_SOON,
+                    spec = ringSpec(DueStatus.DUE_SOON, days, 0, soonItem.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
         if (attention.isNotEmpty()) {
             item { SectionHeader("需要关注", attention.size) }
             items(attention, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
+                ReminderCard(
+                    item = r.item,
+                    status = r.status,
+                    spec = ringSpec(r.status, r.daysLeft, r.overdueDays, r.item.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
         item { Spacer(Modifier.width(1.dp).padding(bottom = 12.dp)) }
@@ -143,26 +172,27 @@ private fun HeroStat(value: String, label: String) {
     }
 }
 
-/** reminder 卡：ItemCard + DueRing（LOW_STOCK 无天数传 null）；紧急组下方 AnimatedVisibility 动作行 */
+/** 今日行卡：ItemCard + DueRing（环的文本与弧由 ringSpec 决定）；紧急组经 actions 槽挂快捷操作 */
 @Composable
 private fun ReminderCard(
-    r: Reminder,
-    vm: ItemsViewModel,
+    item: Item,
+    status: DueStatus,
+    spec: RingSpec,
     onDetail: (String) -> Unit,
-    showActions: Boolean,
     modifier: Modifier = Modifier,
+    showActions: Boolean = false,
+    actions: @Composable () -> Unit = {},
 ) {
-    val item = r.item
-    val cat = Categories.default(item.categoryId)
+    val tone = StatusTone(status)
     Column(modifier.fillMaxWidth()) {
         ItemCard(
             item = item,
-            icon = ReminderEngine.displayIcon(item, cat.emoji),
-            tone = StatusTone(r.status),
+            icon = ReminderEngine.displayIcon(item, Categories.default(item.categoryId).emoji),
+            tone = tone,
             onClick = { onDetail(item.id) },
             onLongClick = { onDetail(item.id) },
         ) {
-            DueRing(daysLeft = if (r.status == DueStatus.LOW_STOCK) null else r.daysLeft)
+            DueRing(spec, tone)
         }
         AnimatedVisibility(
             visible = showActions,
@@ -170,13 +200,9 @@ private fun ReminderCard(
             exit = shrinkVertically(),
         ) {
             Row(
-                modifier = Modifier.padding(top = 6.dp),
+                modifier = Modifier.padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AssistChip(onClick = { vm.rollForward(item.id) }, label = { Text("🍽 续期") })
-                AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
-                AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
-            }
+            ) { actions() }
         }
     }
 }

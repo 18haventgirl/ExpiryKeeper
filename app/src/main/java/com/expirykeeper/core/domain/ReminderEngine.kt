@@ -26,6 +26,23 @@ data class Reminder(
     val notificationId: Int,
 )
 
+/** 到期环显示规格：中心文本 + 弧比例（配色由 UI 侧 StatusTone 决定，不在此重复表达） */
+data class RingSpec(val text: String, val fraction: Float)
+
+/**
+ * 到期环该显示什么：逾期显示「已逾期几天」并走满环，今天到期显示「今」，其余按窗口递减。
+ * 窗口取 max(14, 最远提前量)，否则药品类 60/30 天偏移的物品永远满环（修 A4）。
+ */
+fun ringSpec(status: DueStatus, daysLeft: Long?, overdueDays: Long, offsets: List<Int>): RingSpec {
+    val window = maxOf(14L, offsets.maxOrNull()?.toLong() ?: 0L)
+    return when {
+        daysLeft == null -> RingSpec("·", 0f)
+        status == DueStatus.OVERDUE -> RingSpec(overdueDays.toString(), 1f)
+        status == DueStatus.DUE_TODAY || status == DueStatus.RENEWAL_TODAY -> RingSpec("今", 0f)
+        else -> RingSpec(daysLeft.toString(), (daysLeft.toFloat() / window).coerceIn(0f, 1f))
+    }
+}
+
 /** 纯函数规则引擎：不依赖 Android，输入物品快照 + 今天，输出今天应发的提醒 */
 object ReminderEngine {
 
@@ -95,6 +112,10 @@ object ReminderEngine {
             }
             .filter { it.second <= withinDays }
             .sortedBy { it.second }
+
+    /** 今日屏「即将到期」组：未来 1..withinDays 天内的全部物品，与 hero 计数同一口径（修 A6） */
+    fun soonSection(upcoming: List<Pair<Item, Long>>, withinDays: Long): List<Pair<Item, Long>> =
+        upcoming.filter { it.second in 1..withinDays }.sortedBy { it.second }
 
     /** 通知 id 纯函数：UI 取消既有通知与引擎发通知共用同一算法，LOW_STOCK 传 date=null */
     fun notifIdFor(itemId: String, status: DueStatus, date: LocalDate?): Int =

@@ -93,11 +93,23 @@
 
 ## 施工批次
 
-### 第 1 批 · 正确性（A4 A6 A3 B4）
-- [ ] A4 逾期天数可见：OVERDUE 显示 `overdueDays` + error 色弧 + 「逾 N 天」；分母不再锁 14 天
-- [ ] A6 `DUE_SOON` 改区间判定，与 Hero 计数同口径
-- [ ] A3 表单校验加 touched/submitAttempted 门槛
-- [ ] B4 暴露 `isLoading`，加载中不再用空集合冒充空态；编辑页去白闪
+### 第 1 批 · 正确性（A4 A6 A3 B4）✅ 已完成
+
+**裁决记录**
+
+- **A4**：新增纯函数 `ringSpec(status, daysLeft, overdueDays, offsets) → RingSpec(text, fraction)`，`DueRing` 退化为只渲染规格、配色取自 `StatusTone`。规则：逾期=满环+逾期天数；今天=空环+「今」；其余=按窗口递减。窗口取 `max(14, 最远提前量)`，否则药品类 60/30 天偏移的物品永远满环。
+- **A6**：**通知仍按精确 offset 触发**（引擎 `DUE_SOON` 语义不变，不打扰原则），今日屏的「即将到期」组改由 `ReminderEngine.soonSection(upcoming14, 1..14)` 提供 —— 数字与列表同源，结构上不可能再各说各话。hero 三个数分别等于：待处理=三组行数之和、两周内=即将到期行数、全部=清单项数。
+- **A3**：规则校验从 `AddEditScreen` 抽为 `ExpiryForm.ruleError(RuleState)`（顺带补上此前零覆盖的跨字段规则测试）。**保存按钮不再置灰**：原 I-4 用 disabled 表达无效态，改为点一次揭示全部缺失错误。这同时消掉 B5（禁用文字 CR=1.69 不可读）。不写入任何无效数据。
+- **B4**：`ItemsViewModel` 加 `_loaded`/`isLoading`（`onEach` 挂在既有 `observeAll` 上，不二次收集），今日/清单空态改为 `isEmpty && !loading`；添加页 `if (!loaded) return` 换成居中 `CircularProgressIndicator`。
+
+**验证**：单测 32 → **45 全绿**（引擎 +9、表单 +4，其余为既有用例）；lint 0 error。设备实测（epoch-day 20719 = 2026-09-23 GMT，注意设备 TZ 是 GMT 与宿主 +8 不同日）：感冒灵逾期3→「3」满弧、牛奶逾期1→「1」满弧（像素 8/8 采样确认）、视频会员→「2」约 51° 弧、面霜→「6」；待处理 5 = 紧急2+即将到期2+需要关注1，两周内 2 = 即将到期 2；新建表单首帧错误文本 **0 条**（修复前 2 条），点保存后出现 2 条且未写入（items 仍 6 条）。
+
+**过程中新撞到的证据**：`面霜` 的到期环被 FAB 压住（弧采样 0/8 全非环色，因为量到 FAB 像素）—— 直接坐实 B8「今日页缺 `contentPadding(bottom=96.dp)`」；另外新建页的保存键首屏不可见（需滚动到 y=1967 才出现）—— 坐实 A2。
+
+- [x] A4 逾期天数可见：OVERDUE 显示 `overdueDays` + error 色弧 + 「逾 N 天」；分母不再锁 14 天
+- [x] A6 `DUE_SOON` 组改区间口径，与 hero 同源
+- [x] A3 表单校验加 revealed 门槛（保存点击后揭示）
+- [x] B4 暴露 `isLoading`，加载中不再用空集合冒充空态；编辑页去白闪
 
 ### 第 2 批 · 结构性 P0（A1 A2 A5）
 - [ ] A1 详情浮层改覆盖路由（底下继续渲染来路屏）+ 两屏各自保留滚动位置

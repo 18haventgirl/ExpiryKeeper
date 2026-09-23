@@ -4,6 +4,7 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.ringSpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -116,5 +117,64 @@ class ReminderEngineTest {
         )
         val r = ReminderEngine.computeOne(item, today)!!
         assertEquals(DueStatus.DUE_TODAY, r.status)
+    }
+
+    // ---- A4 到期环显示规格：逾期与「今天到期」「还剩 N 天」必须一眼可分 ----
+
+    @Test fun overdueRingShowsDaysOverdueAndFullArc() {
+        val spec = ringSpec(DueStatus.OVERDUE, daysLeft = 0, overdueDays = 3, offsets = listOf(3, 0))
+        assertEquals("3", spec.text)
+        assertEquals(1f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun longOverdueStaysReadableInsteadOfZero() {
+        val spec = ringSpec(DueStatus.OVERDUE, daysLeft = 0, overdueDays = 200, offsets = listOf(3, 0))
+        assertEquals("200", spec.text)
+    }
+
+    @Test fun dueTodayRingIsNotConfusableWithOverdue() {
+        val spec = ringSpec(DueStatus.DUE_TODAY, daysLeft = 0, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("今", spec.text)
+        assertEquals(0f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun renewalTodayRingAlsoReadsToday() {
+        assertEquals("今", ringSpec(DueStatus.RENEWAL_TODAY, daysLeft = 0, overdueDays = 0, offsets = listOf(3, 0)).text)
+    }
+
+    @Test fun futureRingCountsDownWithinWindow() {
+        val spec = ringSpec(DueStatus.DUE_SOON, daysLeft = 7, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("7", spec.text)
+        assertEquals(0.5f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun ringWindowFollowsLongOffsetsInsteadOfPinningFull() {
+        val spec = ringSpec(DueStatus.DUE_SOON, daysLeft = 45, overdueDays = 0, offsets = listOf(60, 30))
+        assertEquals(0.75f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun lowStockRingShowsPlaceholderWithoutNumber() {
+        val spec = ringSpec(DueStatus.LOW_STOCK, daysLeft = null, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("·", spec.text)
+        assertEquals(0f, spec.fraction, 0.0001f)
+    }
+
+    // ---- A6 今日「即将到期」与 hero「两周内」必须同口径 ----
+
+    @Test fun soonSectionCoversWholeHorizonNotOnlyOffsetDays() {
+        val at1 = expiryItem(1, listOf(3, 0))
+        val at10 = expiryItem(10, listOf(3, 0))
+        val soon = ReminderEngine.soonSection(listOf(at10 to 10L, at1 to 1L), withinDays = 14)
+        assertEquals(listOf(1L, 10L), soon.map { it.second })
+    }
+
+    @Test fun soonSectionExcludesTodayAndBeyondWindow() {
+        val todayItem = expiryItem(0, listOf(0))
+        val overdue = expiryItem(-2, listOf(3, 0))
+        val far = expiryItem(30, listOf(3, 0))
+        val soon = ReminderEngine.soonSection(
+            listOf(far to 30L, overdue to -2L, todayItem to 0L), withinDays = 14,
+        )
+        assertTrue(soon.isEmpty())
     }
 }
