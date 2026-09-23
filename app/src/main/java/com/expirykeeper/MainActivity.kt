@@ -1,6 +1,7 @@
 package com.expirykeeper
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,9 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.expirykeeper.reminders.ReminderScheduler
-import com.expirykeeper.ui.EkApp
-import com.expirykeeper.ui.theme.EkTheme
+import com.expirykeeper.core.ui.designsystem.EkTheme
+import com.expirykeeper.notifications.ReminderScheduler
 
 class MainActivity : ComponentActivity() {
 
@@ -21,11 +21,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33) {
+        // 仅在「尚未授权」时请求；已授权用户冷启动不再触发 granted→runNow→notifyAll，
+        // 否则用户刚滑掉的通知会在打开 App 几秒后原样复活（表现为"通知不会自动消失"）
+        val notificationGranted = Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (!notificationGranted) {
             askNotification.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        val dynamicAllowed = (application as App).container.prefs.dynamicColor
         setContent {
-            EkTheme {
+            EkTheme(dynamicAllowed = dynamicAllowed) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier) {
                     EkApp()
                 }

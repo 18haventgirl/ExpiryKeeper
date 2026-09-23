@@ -30,6 +30,27 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true")
+}
+
+// room-migration 2.8.5 的 SchemaBundle 序列化器编译自 kotlinx-serialization 1.8.1，
+// 但 androidTest 运行时被 strictly 1.7.3 BOM 锁住 core，导致 core/json 版本分裂抛
+// AbstractMethodError。迁移测试仅跑在 androidTest classpath，故只在此强制对齐 1.8.1。
+configurations.matching { it.name.contains("AndroidTest") }.configureEach {
+    resolutionStrategy.force(
+        "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
+    )
 }
 
 dependencies {
@@ -50,6 +71,12 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    // 仅测试 JVM 补 org.json（运行时用 Android 内置）
+    testImplementation("org.json:json:20240303")
+
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
