@@ -165,7 +165,7 @@ fun ItemCard(
                     .background(tone.container, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(icon, fontSize = 26.sp)
+                Text(icon, fontSize = 22.sp)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {

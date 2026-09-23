@@ -56,7 +56,7 @@ fun EmptyState(emoji: String, title: String, hint: String, modifier: Modifier = 
     }
 }
 
-/** Google Clock 风大标题顶栏：可选返回键 + displaySmall 标题 + 副标题 + 行内动作 */
+/** Google Clock 风大标题顶栏：displaySmall 标题恒贴容器左缘（返回键独立成行，M3 LargeTopAppBar 式），副标题 + 行内动作 */
 @Composable
 fun BigHeader(
     title: String,
@@ -65,27 +65,28 @@ fun BigHeader(
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 24.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.displaySmall)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.displaySmall)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+            actions()
         }
-        actions()
     }
 }

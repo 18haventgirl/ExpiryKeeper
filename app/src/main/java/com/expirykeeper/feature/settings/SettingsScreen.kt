@@ -30,7 +30,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -157,16 +156,15 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
         }
     }
 
-    Scaffold { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            BigHeader(title = "设置", subtitle = "提醒权限 · 外观 · 数据", onBack = onBack, modifier = Modifier.padding(top = 8.dp))
+    // 外层 EkApp Scaffold 已处理系统栏 inset，此处不再嵌套 Scaffold（双 padding 会让标题下沉）
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        BigHeader(title = "设置", subtitle = "提醒权限 · 外观 · 数据", onBack = onBack)
 
             SettingsCard("提醒权限状态") {
                 PermissionRow(
@@ -269,7 +267,6 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
 
             Spacer(Modifier.width(1.dp).padding(bottom = 24.dp))
         }
-    }
 }
 
 @Composable

@@ -55,7 +55,10 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     val today = LocalDate.now()
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         BigHeader(
             title = "清单",
             subtitle = "${visible.size} 件",

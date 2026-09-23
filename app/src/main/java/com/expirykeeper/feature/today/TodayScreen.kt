@@ -60,14 +60,13 @@ fun TodayScreen(
     val attention = reminders.filter { it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
             BigHeader(
                 title = "今日",
                 subtitle = today.format(DateTimeFormatter.ofPattern("M月d日 · EEE", Locale.CHINA)),
-                modifier = Modifier.padding(top = 8.dp),
                 actions = {
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "设置")
@@ -114,7 +113,7 @@ private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
         ) {
             HeroStat(pending.toString(), "待处理")
@@ -124,7 +123,7 @@ private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
         if (pending == 0) {
             Text(
                 "今天一切安好 ✨",
-                Modifier.padding(start = 24.dp, bottom = 20.dp),
+                Modifier.padding(start = 16.dp, bottom = 20.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
