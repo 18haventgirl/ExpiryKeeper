@@ -129,11 +129,27 @@
 - [x] B13 edge-to-edge 显式化
 
 ### 第 3 批 · 质感（B1 B2 B3 B5 B6 B7 B8 B9 B10 B11 B12 B15 B16 B17 B18）
-- [ ] B1 tonal surface 层级（页面降一档或卡片改描边）
-- [ ] B2 `CountPill` 取代 Badge；B9 emoji→`Icon`
-- [ ] B3 `animateItem()` + NavHost 转场 + `motionScheme`
-- [ ] B6 `Type.kt` 补全 scale，Hero 数字独立层级
-- [ ] B5/B7/B8/B10/B11/B12/B15/B16/B17/B18 逐项
+
+#### 3a 色彩层级与排版 ✅
+
+- **B1 tonal 分层取代阴影**：`ItemCard`/`FormCard`/`SettingsCard` → `surfaceContainerHigh` + **elevation 0**，`HeroCard` → `surfaceContainerHighest` + elevation 0。实测卡片 vs 页面 CR 从 **1.104 → 1.165**，Hero 1.222，导航栏（surfaceContainer）落在两者之间成为独立一层。
+  - 走过的无效尝试：给 `MainActivity` 的 `Surface` 设 `surfaceContainerLow` 想让页面更浅 —— 实测页面底仍是 `#faf8fe`，因为 M3 `Scaffold` 自带 `containerColor = background` 盖在它上面。已回退，不留误导性死代码。
+- **B2 `CountPill` 取代 `Badge`**：`Headers.kt` 新增 `CountPill`（`secondaryContainer` + `labelLarge`），`SectionHeader` 改用它。截图确认分组计数不再是红底，屏幕上唯一的红重新只属于「逾期」。
+- **B6 排版层级**：`Type.kt` 补 `headlineLarge`(32sp Bold) 与 `titleMedium`(16sp Medium)；`ItemCard` 标题 `bodyLarge`+`copy(Medium)` → `titleMedium`（不再逐处覆字重）；`HeroStat` 改为**主次式**：待处理 `headlineLarge`/`onSurface`，两周內与全部 `headlineSmall`/`onSurfaceVariant`；`SettingsCard` 标题统一 `titleLarge`。
+  - **否决**「待处理 > 0 就染 error」：待处理几乎恒 > 0，常驻红等于噪音，违反「一处下重注、其余全安静」。改用尺寸/明度做主次。
+- **B15 返回键对齐**：`BigHeader` 返回按钮 `padding(start = 4.dp)` → `(-12).dp`。原因：48dp 按钮内 24dp 图标左右各空 12dp，而页边距已给 16dp，正 padding 只会把图标推到 32dp；外移 12dp 后图标光边与标题左缘同为 16dp。
+
+#### 3b / 3c 待做
+- [ ] B3 清单行 `animateItem()` + NavHost 转场 + `motionScheme`
+- [ ] B7 搜索框放大镜与一键清除
+- [ ] B8 间距收敛、`Spacer(width(1.dp))` 改 `height`、今日页 FAB 留白（已实测坐实：面霜的到期环被 FAB 压住，弧采样 0/8）
+- [ ] B9 功能位 emoji→`Icon`、触控尺寸 ≥48dp
+- [ ] B10「🍽 续期」灰白线稿换字形
+- [ ] B11 品类名内「·」与字段分隔符「 · 」撞车
+- [ ] B12 空态居中 + 搜索时保留总数语境
+- [ ] B16 移除与单击同义的长按
+- [ ] B17 保存/取消宽度失衡（812px vs 152px）
+- [ ] B18 反馈统一到 Snackbar 总线（备份结果卡内文本、rollForward Toast）
 
 ### 第 4 批 · 资产化（C + D 差距 6）
 - [ ] `EkSpacing`/`EkCard`/`Pill`/`KeyValueRow` token 与组件收敛

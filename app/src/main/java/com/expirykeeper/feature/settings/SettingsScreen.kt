@@ -43,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -236,7 +235,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
             SettingsCard("概览") {
                 KvLine("总件数", "${items.size} 件")
                 KvLine("30 天处理次数", "$rollCount 次")
-                Text("品类分布", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text("品类分布", style = MaterialTheme.typography.labelLarge)
                 val grouped = items.groupingBy { it.categoryId }.eachCount()
                 if (grouped.isEmpty()) {
                     Text("暂无物品", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -253,7 +252,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
             }
 
             SettingsCard("关于") {
-                Text("到期管家（工程版）", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("到期管家（工程版）", style = MaterialTheme.typography.titleMedium)
                 val version = remember {
                     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "未知"
                 }
@@ -274,11 +273,11 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(title, style = MaterialTheme.typography.titleLarge)
             content()
         }
     }

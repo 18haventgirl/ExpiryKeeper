@@ -1,5 +1,7 @@
 package com.expirykeeper.core.ui.designsystem
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -8,9 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,14 +24,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** 分组标题：titleLarge + 可选尾部计数 Badge */
+/** 分组计数胶囊：secondaryContainer 中性底。M3 的 Badge 是「未读/错误」语义，当计数用会制造虚假紧急感（修 B2） */
+@Composable
+fun CountPill(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+/** 分组标题：titleLarge + 可选尾部计数 */
 @Composable
 fun SectionHeader(text: String, count: Int? = null, modifier: Modifier = Modifier) {
     Row(modifier = modifier.padding(top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.titleLarge)
         if (count != null) {
             Spacer(Modifier.width(8.dp))
-            Badge { Text(count.toString()) }
+            CountPill(count)
         }
     }
 }
@@ -71,7 +89,8 @@ fun BigHeader(
             .padding(top = 24.dp),
     ) {
         if (onBack != null) {
-            IconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
+            // 48dp 按钮里图标居中、左右各空 12dp；外移 12dp 才让图标光边与 16dp 页边距的标题对齐（修 B15）
+            IconButton(onClick = onBack, modifier = Modifier.padding(start = (-12).dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         }

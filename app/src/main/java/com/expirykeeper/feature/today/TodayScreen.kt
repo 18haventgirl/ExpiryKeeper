@@ -25,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.expirykeeper.core.data.Categories
@@ -132,22 +131,25 @@ fun TodayScreen(
     }
 }
 
-/** Hero 卡：三列 displaySmall 统计 + 空日安好事案 */
+/**
+ * Hero 卡：三列统计走「一处下重注」的编辑式层级 —— 待处理是主数字（headlineLarge），
+ * 两周内/全部是次级语境（headlineSmall + 次要色），避免三个 40sp 同权重互相抵消（修 B6）。
+ */
 @Composable
 private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
         ) {
-            HeroStat(pending.toString(), "待处理")
-            HeroStat(upcoming.toString(), "两周内")
-            HeroStat(total.toString(), "全部")
+            HeroStat(pending.toString(), "待处理", prominent = true)
+            HeroStat(upcoming.toString(), "两周内", prominent = false)
+            HeroStat(total.toString(), "全部", prominent = false)
         }
         if (pending == 0) {
             Text(
@@ -161,9 +163,17 @@ private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
 }
 
 @Composable
-private fun HeroStat(value: String, label: String) {
+private fun HeroStat(value: String, label: String, prominent: Boolean) {
     Column {
-        Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text(
+            value,
+            style = if (prominent) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineSmall,
+            color = if (prominent) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,

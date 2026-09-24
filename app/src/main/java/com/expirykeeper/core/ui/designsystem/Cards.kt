@@ -118,8 +118,9 @@ fun DueRing(spec: RingSpec, tone: Tone, size: Dp = 44.dp, modifier: Modifier = M
 }
 
 /**
- * 清单/今日通用条目卡：large 圆角 + surfaceContainer + 按压 scale 1→0.97 动画；
- * leading 44dp 圆形 tone 底 emoji 文本（26sp），trailing 槽放 StatusPill / DueRing 等。
+ * 清单/今日通用条目卡：large 圆角 + surfaceContainerHigh，靠 tonal 分层而不加阴影
+ * （M3 里 filled 容器与阴影是两种抬升信号，同时用会互相抵消，修 B1）；按压 scale 1→0.97；
+ * leading 44dp 圆形 tone 底 emoji，trailing 槽放 StatusPill / DueRing。
  */
 @Composable
 fun ItemCard(
@@ -141,8 +142,8 @@ fun ItemCard(
             .fillMaxWidth()
             .scale(scale),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         val clickModifier = when {
             onLongClick != null -> Modifier.combinedClickable(
@@ -174,8 +175,7 @@ fun ItemCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
