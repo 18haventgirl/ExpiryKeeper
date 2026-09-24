@@ -115,14 +115,16 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                 }
             } else if (sort == ItemSort.CATEGORY) {
                 groupedCategories(visible).forEach { (rawId, cat, list) ->
-                    item(key = "group-$rawId") { SectionHeader("${cat.emoji} ${cat.name}", list.size) }
+                    item(key = "group-$rawId") {
+                        SectionHeader("${cat.emoji} ${cat.name}", list.size, modifier = Modifier.animateItem())
+                    }
                     items(list, key = { it.id }) { item ->
-                        ListRow(item = item, onDetail = onDetail, today = today)
+                        ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
                     }
                 }
             } else {
                 items(visible, key = { it.id }) { item ->
-                    ListRow(item = item, onDetail = onDetail, today = today)
+                    ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -144,7 +146,12 @@ private fun groupedCategories(
 
 /** 单行卡：尾部只说「到期」这一件事，数量进副标题（修 A5：不再混用状态胶囊与光秃「—」） */
 @Composable
-private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
+private fun ListRow(
+    item: Item,
+    onDetail: (String) -> Unit,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
     val cat = Categories.default(item.categoryId)
     val reminder = ReminderEngine.computeOne(item, today)
     val expireDay = ReminderEngine.dueDayOf(item)
@@ -160,6 +167,7 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
             item.location ?: item.note,
             quantityLabel(item),
         ).joinToString(" · ").takeIf { it.isNotEmpty() },
+        modifier = modifier,
         onClick = { onDetail(item.id) },
         onLongClick = { onDetail(item.id) },
     ) {

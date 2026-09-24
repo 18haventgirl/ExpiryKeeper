@@ -1,5 +1,10 @@
 package com.expirykeeper
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -38,6 +43,15 @@ import com.expirykeeper.feature.list.ListScreen
 import com.expirykeeper.feature.settings.SettingsScreen
 import com.expirykeeper.feature.today.TodayScreen
 import com.expirykeeper.ui.ItemsViewModel
+
+// 转场时长取自 M3 的 medium2/short4 量级。MaterialTheme.motionScheme 在 material3 1.4.0 是
+// internal，应用层拿不到，所以这里显式给 spec（修 B3）
+private val TabEnter = fadeIn(tween(180))
+private val TabExit = fadeOut(tween(120))
+private val PushEnter = slideInHorizontally(tween(240)) { it / 3 } + fadeIn(tween(240))
+private val PushExit = fadeOut(tween(140))
+private val PushPopEnter = fadeIn(tween(180))
+private val PushPopExit = slideOutHorizontally(tween(240)) { it / 3 } + fadeOut(tween(240))
 
 @Composable
 fun EkApp(vm: ItemsViewModel = viewModel()) {
@@ -92,16 +106,36 @@ fun EkApp(vm: ItemsViewModel = viewModel()) {
             },
         ) { padding ->
             NavHost(navController = nav, startDestination = "today", modifier = Modifier.padding(padding)) {
-                composable("today") {
+                composable(
+                    "today",
+                    enterTransition = { TabEnter },
+                    exitTransition = { TabExit },
+                ) {
                     TodayScreen(vm,
                         onDetail = { detailId = it },
                         onSettings = { nav.navigate("settings") })
                 }
-                composable("list") {
+                composable(
+                    "list",
+                    enterTransition = { TabEnter },
+                    exitTransition = { TabExit },
+                ) {
                     ListScreen(vm, onDetail = { detailId = it })
                 }
-                composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
-                composable("add?itemId={itemId}") { entry ->
+                composable(
+                    "settings",
+                    enterTransition = { PushEnter },
+                    exitTransition = { PushExit },
+                    popEnterTransition = { PushPopEnter },
+                    popExitTransition = { PushPopExit },
+                ) { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
+                composable(
+                    "add?itemId={itemId}",
+                    enterTransition = { PushEnter },
+                    exitTransition = { PushExit },
+                    popEnterTransition = { PushPopEnter },
+                    popExitTransition = { PushPopExit },
+                ) { entry ->
                     val raw = entry.arguments?.getString("itemId")
                     AddEditScreen(vm, itemId = raw?.takeIf { it != "null" },
                         onDone = { if (!nav.popBackStack()) nav.navigate("today") })
