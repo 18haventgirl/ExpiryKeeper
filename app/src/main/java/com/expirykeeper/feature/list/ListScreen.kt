@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -51,6 +54,7 @@ import java.time.LocalDate
 @Composable
 fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     val visible by vm.visibleItems.collectAsStateWithLifecycle()
+    val total by vm.items.collectAsStateWithLifecycle()
     val query by vm.filterQuery.collectAsStateWithLifecycle()
     val sort by vm.sortOrder.collectAsStateWithLifecycle()
     val loading by vm.isLoading.collectAsStateWithLifecycle()
@@ -64,7 +68,8 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     ) {
         BigHeader(
             title = "清单",
-            subtitle = "${visible.size} 件",
+            // 搜索时保留总数语境，否则「0 件」会让人以为东西没了（修 B12）
+            subtitle = if (query.isBlank()) "${visible.size} 件" else "${visible.size} / ${total.size} 件",
             actions = {
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
@@ -98,33 +103,46 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
             expanded = false,
             onExpandedChange = {},
             placeholder = { Text("搜索名称 / 备注 / 位置") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = if (query.isEmpty()) {
+                null
+            } else {
+                {
+                    IconButton(onClick = { vm.filterQuery.value = "" }) {
+                        Icon(Icons.Filled.Close, contentDescription = "清空搜索")
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (visible.isEmpty() && !loading) {
-                item {
-                    if (query.isNotBlank()) {
-                        EmptyState("🔍", "没有找到匹配的物品", "换个关键词试试")
-                    } else {
-                        EmptyState("📦", "还没有物品", "点右下角 ➕ 添加第一件")
-                    }
+        if (visible.isEmpty() && !loading) {
+            // 空态占满剩余空间居中，而不是顶在搜索框下面留一屏空白（修 B12）
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (query.isNotBlank()) {
+                    EmptyState("🔍", "没有找到匹配的物品", "换个关键词，或清空搜索框")
+                } else {
+                    EmptyState("📦", "还没有物品", "点右下角 ➕ 添加第一件")
                 }
-            } else if (sort == ItemSort.CATEGORY) {
-                groupedCategories(visible).forEach { (rawId, cat, list) ->
-                    item(key = "group-$rawId") {
-                        SectionHeader("${cat.emoji} ${cat.name}", list.size, modifier = Modifier.animateItem())
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (sort == ItemSort.CATEGORY) {
+                    groupedCategories(visible).forEach { (rawId, cat, list) ->
+                        item(key = "group-$rawId") {
+                            SectionHeader("${cat.emoji} ${cat.name}", list.size, modifier = Modifier.animateItem().padding(top = 16.dp))
+                        }
+                        items(list, key = { it.id }) { item ->
+                            ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
+                        }
                     }
-                    items(list, key = { it.id }) { item ->
+                } else {
+                    items(visible, key = { it.id }) { item ->
                         ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
                     }
-                }
-            } else {
-                items(visible, key = { it.id }) { item ->
-                    ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -163,13 +181,13 @@ private fun ListRow(
         } else {
             Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         },
+        // 字段之间用 " / "，把「·」留给品类名的层级（修 B11）
         detail = listOfNotNull(
             item.location ?: item.note,
             quantityLabel(item),
-        ).joinToString(" · ").takeIf { it.isNotEmpty() },
+        ).joinToString(" / ").takeIf { it.isNotEmpty() },
         modifier = modifier,
         onClick = { onDetail(item.id) },
-        onLongClick = { onDetail(item.id) },
     ) {
         when {
             reminder != null -> StatusPill(reminder.status, reminder.status.labelZh)

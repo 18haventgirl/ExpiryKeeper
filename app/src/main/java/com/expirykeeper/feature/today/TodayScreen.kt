@@ -5,16 +5,18 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,6 +39,7 @@ import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.core.ui.designsystem.DueRing
 import com.expirykeeper.core.ui.designsystem.EmptyState
 import com.expirykeeper.core.ui.designsystem.ItemCard
+import com.expirykeeper.core.ui.designsystem.QuickActions
 import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusTone
 import com.expirykeeper.ui.ItemsViewModel
@@ -65,6 +68,8 @@ fun TodayScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        // 底部留出 FAB 槽，否则最后一张卡的到期环会被 FAB 压住（修 B8，实测弧采样 0/8 坐实）
+        contentPadding = PaddingValues(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
@@ -86,7 +91,7 @@ fun TodayScreen(
             item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }
         }
         if (urgent.isNotEmpty()) {
-            item { SectionHeader("紧急", urgent.size) }
+            item { SectionHeader("紧急", urgent.size, modifier = Modifier.padding(top = 16.dp)) }
             items(urgent, key = { it.notificationId }) { r ->
                 ReminderCard(
                     item = r.item,
@@ -96,15 +101,17 @@ fun TodayScreen(
                     modifier = Modifier.animateItem(),
                     showActions = true,
                     actions = {
-                        AssistChip(onClick = { vm.rollForward(r.item.id) }, label = { Text("🍽 续期") })
-                        AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
-                        AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
+                        QuickActions(
+                            onRollForward = { vm.rollForward(r.item.id) },
+                            onSnooze = { vm.snooze3(r) },
+                            onHandle = { vm.markHandled(r) },
+                        )
                     },
                 )
             }
         }
         if (soon.isNotEmpty()) {
-            item { SectionHeader("即将到期", soon.size) }
+            item { SectionHeader("即将到期", soon.size, modifier = Modifier.padding(top = 16.dp)) }
             items(soon, key = { "soon-${it.first.id}" }) { (soonItem, days) ->
                 ReminderCard(
                     item = soonItem,
@@ -116,7 +123,7 @@ fun TodayScreen(
             }
         }
         if (attention.isNotEmpty()) {
-            item { SectionHeader("需要关注", attention.size) }
+            item { SectionHeader("需要关注", attention.size, modifier = Modifier.padding(top = 16.dp)) }
             items(attention, key = { it.notificationId }) { r ->
                 ReminderCard(
                     item = r.item,
@@ -127,7 +134,6 @@ fun TodayScreen(
                 )
             }
         }
-        item { Spacer(Modifier.width(1.dp).padding(bottom = 12.dp)) }
     }
 }
 
@@ -200,7 +206,6 @@ private fun ReminderCard(
             icon = ReminderEngine.displayIcon(item, Categories.default(item.categoryId).emoji),
             tone = tone,
             onClick = { onDetail(item.id) },
-            onLongClick = { onDetail(item.id) },
         ) {
             DueRing(spec, tone)
         }

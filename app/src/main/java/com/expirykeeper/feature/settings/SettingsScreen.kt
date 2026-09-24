@@ -21,13 +21,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -264,7 +270,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 )
             }
 
-            Spacer(Modifier.width(1.dp).padding(bottom = 24.dp))
+            Spacer(Modifier.height(24.dp))
         }
 }
 
@@ -292,7 +298,13 @@ private fun PermissionRow(ok: Boolean, title: String, descOn: String, descOff: S
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (ok) "✅" else "⚠️", fontSize = 18.sp)
+        // 状态用 Material 图标而不是 ✅/⚠️：emoji 只靠图形传达，读屏拿不到语义（修 B9）
+        Icon(
+            if (ok) Icons.Filled.CheckCircle else Icons.Filled.Error,
+            contentDescription = if (ok) "已开启" else "未开启",
+            tint = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp),
+        )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)

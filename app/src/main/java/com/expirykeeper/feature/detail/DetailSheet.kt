@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,6 +21,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -37,6 +40,7 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemEvent
 import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.ui.designsystem.QuickActions
 import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusPill
 import com.expirykeeper.ui.ItemsViewModel
@@ -72,9 +76,9 @@ fun DetailSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 16.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val current = item
             when {
@@ -108,8 +112,8 @@ private fun DetailContent(
         Text(ReminderEngine.displayIcon(item, cat.emoji), fontSize = 44.sp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            val subtitle = listOfNotNull(cat.name, item.location).joinToString(" · ")
+            Text(item.name, style = MaterialTheme.typography.titleLarge)
+            val subtitle = listOfNotNull(cat.name, item.location).joinToString(" / ")
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
@@ -153,14 +157,12 @@ private fun DetailContent(
     item.barcode?.takeIf { it.isNotBlank() }?.let { KvRow("条码", it) }
     item.note?.takeIf { it.isNotBlank() }?.let { KvRow("备注", it) }
 
-    // 快速操作行：复用今日屏三件套 VM 函数（snooze/handle 依赖 Reminder 快照，无提醒时只留续期）
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AssistChip(onClick = { vm.rollForward(item.id) }, label = { Text("🍽 续期") })
-        if (reminder != null) {
-            AssistChip(onClick = { vm.snooze3(reminder) }, label = { Text("😴 稍后3天") })
-            AssistChip(onClick = { vm.markHandled(reminder) }, label = { Text("✅ 今天不再提醒") })
-        }
-    }
+    // 快速操作行：与今日屏共用一份组件（snooze/handle 依赖 Reminder 快照，无提醒时只留续期）
+    QuickActions(
+        onRollForward = { vm.rollForward(item.id) },
+        onSnooze = reminder?.let { r -> { vm.snooze3(r) } },
+        onHandle = reminder?.let { r -> { vm.markHandled(r) } },
+    )
 
     // 最近记录：30 天事件流水，kind → 中文
     SectionHeader("最近记录")
@@ -183,7 +185,9 @@ private fun DetailContent(
     // 底部：编辑 + 删除（唯一删除路径，撤销走 Snackbar）
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
         OutlinedButton(onClick = { onEdit(item.id) }, modifier = Modifier.weight(1f)) {
-            Text("✏️ 编辑")
+            Icon(Icons.Filled.Edit, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("编辑")
         }
         FilledTonalButton(
             onClick = { vm.deleteWithUndo(item.id); onDismiss() },

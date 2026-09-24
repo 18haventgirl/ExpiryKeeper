@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -311,7 +312,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             // 删除入口唯一在详情浮层（Task 11：deleteWithUndo 可撤销），此处不再提供
             TextButton(onClick = onDone) { Text("取消") }
         }
-        Spacer(Modifier.width(1.dp).padding(bottom = 24.dp))
+        Spacer(Modifier.height(24.dp))
     }
 
     if (showEmojiSheet) {

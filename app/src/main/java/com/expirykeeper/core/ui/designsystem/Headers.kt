@@ -40,10 +40,10 @@ fun CountPill(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** 分组标题：titleLarge + 可选尾部计数 */
+/** 分组标题：titleLarge + 可选尾部计数。间距交给容器 arrangement 决定，组件不自带 padding（修 B8） */
 @Composable
 fun SectionHeader(text: String, count: Int? = null, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.padding(top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.titleLarge)
         if (count != null) {
             Spacer(Modifier.width(8.dp))

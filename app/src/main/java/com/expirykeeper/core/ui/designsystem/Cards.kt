@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -128,7 +127,6 @@ fun ItemCard(
     icon: String,
     tone: Tone,
     onClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** 副标题覆盖：不传则回退 位置/备注 */
     detail: String? = null,
@@ -145,19 +143,14 @@ fun ItemCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        val clickModifier = when {
-            onLongClick != null -> Modifier.combinedClickable(
-                interactionSource = interactionSource,
-                indication = ripple(),
-                onClick = onClick ?: {},
-                onLongClick = onLongClick,
-            )
-            onClick != null -> Modifier.clickable(
+        val clickModifier = if (onClick != null) {
+            Modifier.clickable(
                 interactionSource = interactionSource,
                 indication = ripple(),
                 onClick = onClick,
             )
-            else -> Modifier
+        } else {
+            Modifier
         }
         Row(
             modifier = clickModifier.padding(horizontal = 16.dp, vertical = 14.dp),

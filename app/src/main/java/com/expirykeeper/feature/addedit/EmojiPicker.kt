@@ -3,8 +3,13 @@ package com.expirykeeper.feature.addedit
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -38,10 +43,15 @@ fun EmojiPickerSheet(
         ) {
             Text("选择图标", style = MaterialTheme.typography.titleMedium)
             TextButton(onClick = { onPick(null) }) {
-                Text(if (current == null) "✓ 跟随品类 ${cat?.emoji ?: "📦"}" else "跟随品类 ${cat?.emoji ?: "📦"}")
+                if (current == null) {
+                    Icon(Icons.Filled.Check, contentDescription = "当前选中")
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("跟随品类 ${cat?.emoji ?: "📦"}")
             }
             Text(
-                "常用 · ${cat?.name ?: "本品类"}",
+                // 括号而不是「·」：品类名自己含 ·，两种语义撞在同一个符号上（修 B11）
+                "常用（${cat?.name ?: "本品类"}）",
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
             )

@@ -2,7 +2,6 @@ package com.expirykeeper.ui
 
 import android.app.Application
 import android.net.Uri
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.expirykeeper.App
@@ -54,13 +53,13 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Room 首包是否已到。修 B4：items 的初值是 emptyList，加载中的那一帧与「真没有数据」
-     * 长得一样，UI 会先闪一次「还没有物品」。首包到达后恒为 true。
+     * 长得一样，UI 会先闪一次「还没有物品」。首包到达后置为已完成。
      */
-    private val _loaded = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _loaded.asStateFlow()
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     val items: StateFlow<List<Item>> = repo.observeAll()
-        .onEach { _loaded.value = true }
+        .onEach { _isLoading.value = false }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 今日应提醒的条目（引擎 computeForDate 快照） */
@@ -132,10 +131,10 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         prefs.dynamicColor = value
     }
 
-    /** 快速操作·续期：按保质期/周期滚期；无法推导只 Toast 提示去编辑（Task 11 前有 snackbar 再升级） */
+    /** 快速操作·续期：按保质期/周期滚期；无法推导时把原因发到 Snackbar 总线（修 B18，反馈只有一条通道） */
     fun rollForward(id: String) = viewModelScope.launch {
         if (!repo.rollForward(id, today)) {
-            Toast.makeText(getApplication(), "这件没有保质期或周期规则，去编辑里补上", Toast.LENGTH_SHORT).show()
+            _snackbar.emit(SnackbarMsg("这件没有保质期或周期规则，去编辑里补上"))
         }
         NotificationHelper.cancelItem(getApplication(), id)
         ReminderScheduler.runNow(getApplication())

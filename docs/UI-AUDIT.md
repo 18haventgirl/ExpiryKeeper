@@ -139,17 +139,28 @@
   - **否决**「待处理 > 0 就染 error」：待处理几乎恒 > 0，常驻红等于噪音，违反「一处下重注、其余全安静」。改用尺寸/明度做主次。
 - **B15 返回键对齐**：`BigHeader` 返回按钮 `padding(start = 4.dp)` → `(-12).dp`。原因：48dp 按钮内 24dp 图标左右各空 12dp，而页边距已给 16dp，正 padding 只会把图标推到 32dp；外移 12dp 后图标光边与标题左缘同为 16dp。
 
-#### 3b / 3c 待做
-- [ ] B3 清单行 `animateItem()` + NavHost 转场 + `motionScheme`
-- [ ] B7 搜索框放大镜与一键清除
-- [ ] B8 间距收敛、`Spacer(width(1.dp))` 改 `height`、今日页 FAB 留白（已实测坐实：面霜的到期环被 FAB 压住，弧采样 0/8）
-- [ ] B9 功能位 emoji→`Icon`、触控尺寸 ≥48dp
-- [ ] B10「🍽 续期」灰白线稿换字形
-- [ ] B11 品类名内「·」与字段分隔符「 · 」撞车
-- [ ] B12 空态居中 + 搜索时保留总数语境
-- [ ] B16 移除与单击同义的长按
-- [ ] B17 保存/取消宽度失衡（812px vs 152px）
-- [ ] B18 反馈统一到 Snackbar 总线（备份结果卡内文本、rollForward Toast）
+#### 3b 动效 ✅
+
+清单行与分组头挂 `Modifier.animateItem()`（key 已稳定是其生效前提），目的地带转场：tab 交叉淡入，push 页（添加/设置）横向滑入滑出。`MaterialTheme.motionScheme` 在 material3 1.4.0 是 **internal**，应用层拿不到，故显式写 spec。
+**动效无法用静态截图证明**：`uiautomator dump` 采样延迟 > 动画时长，两次采样都落在终态。此项只算「按构造正确」，观感需人眼确认。
+
+#### 3c 交互与细节 ✅
+
+- **B7**：搜索框加放大镜 leadingIcon 与「有内容才出现」的清除按钮（实测点清除恢复「6 件」）
+- **B12**：空态改为占满剩余空间居中（实测落在 y=1180-1570，屏心 ≈1290）；搜索时标题改「0 / 6 件」保留总数语境
+- **B8**：今日页补 `contentPadding(bottom = 96.dp)`，实测滚到底末卡 y=1770-1846 已完全避开 FAB（2004-2067）；三处 `Spacer(width(1.dp).padding(bottom=))` 怪写法改 `height()`；`SectionHeader` 不再自带 padding，间距交容器；DetailSheet 横边距 24→16、`spacedBy(10)→16`
+- **B9/B10**：新增 `core/ui/designsystem/Actions.kt` 的 `QuickActions`，今日屏与详情浮层共用一份，「🍽 续期 / 😴 稍后3天 / ✅ 今天不再提醒」全部换成 Material 图标（Autorenew / Snooze / CheckCircle），顺带消灭 U+1F37D 的灰白线稿；设置页权限状态 ✅⚠️ → `CheckCircle`/`Error` 图标 + contentDescription；`✏️ 编辑` → `Edit` 图标；EmojiPicker 的「✓」→ `Check` 图标
+- **B11**：字段分隔符统一 `" / "`，「·」只留给品类名内部层级；EmojiPicker 分组标题改括号「常用（食材·冷藏）」
+- **B16**：移除与单击同义的长按（`ItemCard` 的 `onLongClick` 参数一并删除，不留死代码）
+- **B18**：`rollForward` 的 Toast 改走 Snackbar 总线。备份卡内的持久状态文本**保留**（结果贴在动作旁边对设置页是合适的，Toast 才是离系统的）
+
+#### ⚠ 3c 过程中修出一个我自己引入的 P0
+
+验 B12 时空态完全不渲染。单变量实验（临时去掉 `&& !loading`）证明是 **B4 的极性写反了**：我把 `_loaded`（初值 `false`）直接以 `isLoading` 之名暴露，于是数据到达后 `isLoading == true`，`!loading` 永假 → 空态被永久压制；而首帧那一闪其实从未被修掉。已改为 `_isLoading = MutableStateFlow(true)` + `onEach { _isLoading.value = false }`，名称与值一致。**教训：第 1 批报告里「B4 已修」当时是错的，这类布尔量应该先写一个断言再落地。**
+
+#### 未做（判断后延后）
+- **B17 保存/取消宽度失衡**：保存 `weight(1f)`、取消为文本按钮 —— filled + text 配对本身就会宽度不等，属 M3 常规模式，暂不改
+- **B9 触控尺寸子项**：`EmojiRow`/`CategoryStrip` 自绘 chip 视觉高约 36-38dp，需 `minimumInteractiveComponentSize()` 扩触控区，留待第 4 批与 token 收敛一起做
 
 ### 第 4 批 · 资产化（C + D 差距 6）
 - [ ] `EkSpacing`/`EkCard`/`Pill`/`KeyValueRow` token 与组件收敛
