@@ -158,6 +158,16 @@
 
 验 B12 时空态完全不渲染。单变量实验（临时去掉 `&& !loading`）证明是 **B4 的极性写反了**：我把 `_loaded`（初值 `false`）直接以 `isLoading` 之名暴露，于是数据到达后 `isLoading == true`，`!loading` 永假 → 空态被永久压制；而首帧那一闪其实从未被修掉。已改为 `_isLoading = MutableStateFlow(true)` + `onEach { _isLoading.value = false }`，名称与值一致。**教训：第 1 批报告里「B4 已修」当时是错的，这类布尔量应该先写一个断言再落地。**
 
+#### ⚠ 3c 之后由用户发现的一个崩溃（P0，已修）
+
+**一点设置/添加就闪退**。堆栈：`IllegalArgumentException: Padding must be non-negative` → `Headers.kt:93 BigHeader` ← `SettingsScreen.kt:172`。
+
+根因：B15 为了把返回图标对齐到 16dp 页边距，写了 `Modifier.padding(start = (-12).dp)` —— **Compose 禁止负 padding，会在布局期直接抛异常**。只有传了 `onBack` 的两个入口（设置、添加）会触发，所以今日/清单看起来一切正常。
+
+修法：保留 48dp 方形触控区，用 `Box(size(48.dp)) + contentAlignment = CenterStart` 把图标推到左沿，不用任何负值。实测返回图标左缘 = 42px = **16.0dp**，与标题同列。
+
+**流程教训（比 bug 本身重要）**：我的门禁是「47 单测 + lint 0 error + 逐屏截图」，但截图只走今日/清单两屏，**没有把每条路由真点一遍**。这类「某屏一进去就崩」的错误，单测和 lint 都抓不到。已补 `scripts/smoke-routes.sh`：冷启动后依次进 设置 / 清单 / 添加 / 详情浮层 并检查 `pidof` 与 logcat FATAL，任一步进程消失即非零退出。`alive()` 的失败分支已单独验证（空 pid → DEAD）。
+
 #### 未做（判断后延后）
 - **B17 保存/取消宽度失衡**：保存 `weight(1f)`、取消为文本按钮 —— filled + text 配对本身就会宽度不等，属 M3 常规模式，暂不改
 - **B9 触控尺寸子项**：`EmojiRow`/`CategoryStrip` 自绘 chip 视觉高约 36-38dp，需 `minimumInteractiveComponentSize()` 扩触控区，留待第 4 批与 token 收敛一起做

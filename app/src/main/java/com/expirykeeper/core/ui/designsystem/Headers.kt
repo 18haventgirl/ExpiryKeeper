@@ -1,6 +1,7 @@
 package com.expirykeeper.core.ui.designsystem
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,17 +10,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -89,8 +91,15 @@ fun BigHeader(
             .padding(top = 24.dp),
     ) {
         if (onBack != null) {
-            // 48dp 按钮里图标居中、左右各空 12dp；外移 12dp 才让图标光边与 16dp 页边距的标题对齐（修 B15）
-            IconButton(onClick = onBack, modifier = Modifier.padding(start = (-12).dp)) {
+            // 图标左缘要与 16dp 页边距的标题对齐，但 Compose 禁止负 padding（会在布局期抛
+            // IllegalArgumentException 闪退）：保留 48dp 方形触控区，用 CenterStart 把图标推到左沿
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.CenterStart,
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         }
