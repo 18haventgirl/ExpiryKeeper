@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +39,8 @@ import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemEvent
+import com.expirykeeper.core.domain.dateZh
+import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.ui.designsystem.QuickActions
@@ -45,8 +48,6 @@ import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusPill
 import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * 详情浮层（Task 11）：注册在 `detail/{id}` 路由内、以 ModalBottomSheet 覆盖来路屏。
@@ -105,7 +106,6 @@ private fun DetailContent(
     val cat = Categories.default(item.categoryId)
     val today = LocalDate.now()
     val reminder = ReminderEngine.computeOne(item, today)
-    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.CHINA)
 
     // 头部：emoji 44sp + 名称 + 品类·位置
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -131,23 +131,15 @@ private fun DetailContent(
     // 键值行
     val expire = ReminderEngine.effectiveExpireDay(item)
     if (expire != null) {
-        KvRow("到期日", LocalDate.ofEpochDay(expire).format(fmt))
-        val days = expire - today.toEpochDay()
-        KvRow(
-            "剩余",
-            when {
-                days < 0 -> "已逾期 ${-days} 天"
-                days == 0L -> "今天到期"
-                else -> "$days 天"
-            },
-        )
+        KvRow("到期日", dateZh(LocalDate.ofEpochDay(expire), today))
+        KvRow("剩余", daysCaption(expire - today.toEpochDay()))
     }
     if (item.openedAtEpochDay != null || item.shelfLifeDays != null) {
-        val opened = item.openedAtEpochDay?.let { LocalDate.ofEpochDay(it).format(fmt) } ?: "—"
+        val opened = item.openedAtEpochDay?.let { dateZh(LocalDate.ofEpochDay(it), today) } ?: "—"
         val life = item.shelfLifeDays?.let { "保质期 $it 天" } ?: "未设保质期"
-        KvRow("开封 / 保质期", "$opened · $life")
+        KvRow("开封 / 保质期", "$opened / $life")
     }
-    item.nextDueAtEpochDay?.let { KvRow("下次续费", LocalDate.ofEpochDay(it).format(fmt)) }
+    item.nextDueAtEpochDay?.let { KvRow("下次续费", dateZh(LocalDate.ofEpochDay(it), today)) }
     item.recurrenceDays?.let { KvRow("周期", "每 $it 天") }
     item.quantity?.let { q ->
         val num = if (q % 1.0 == 0.0) q.toInt().toString() else q.toString()
@@ -172,10 +164,12 @@ private fun DetailContent(
         events.take(10).forEach { e ->
             Row(Modifier.fillMaxWidth()) {
                 Text(
-                    LocalDate.ofEpochDay(e.epochDay).format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)),
+                    dateZh(LocalDate.ofEpochDay(e.epochDay), today),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(72.dp),
+                    // 下限保住对齐，上限容得下跨年时的「2027年1月5日」长式
+                    modifier = Modifier.widthIn(min = 72.dp, max = 132.dp).padding(end = 12.dp),
+                    maxLines = 1,
                 )
                 Text(eventKindLabel(e.kind), style = MaterialTheme.typography.bodySmall)
             }

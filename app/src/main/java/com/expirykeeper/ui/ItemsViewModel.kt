@@ -70,14 +70,25 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     val upcoming14: StateFlow<List<Pair<Item, Long>>> = items.map { ReminderEngine.upcoming(it, today) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** 清单搜索关键词：匹配 名称/备注/位置，忽略大小写；空串 = 不过滤 */
-    val filterQuery = MutableStateFlow("")
+    /**
+     * 清单搜索关键词：匹配 名称/备注/位置，忽略大小写；空串 = 不过滤。
+     * 对外只暴露 StateFlow + setter，UI 拿不到写入口（此前 `vm.filterQuery.value =` 是直写）。
+     */
+    private val _filterQuery = MutableStateFlow("")
+    val filterQuery: StateFlow<String> = _filterQuery.asStateFlow()
+    fun setFilterQuery(value: String) {
+        _filterQuery.value = value
+    }
 
     /** 清单排序方式（仅会话内记忆，不持久化） */
-    val sortOrder = MutableStateFlow(ItemSort.EXPIRE_ASC)
+    private val _sortOrder = MutableStateFlow(ItemSort.EXPIRE_ASC)
+    val sortOrder: StateFlow<ItemSort> = _sortOrder.asStateFlow()
+    fun setSortOrder(value: ItemSort) {
+        _sortOrder.value = value
+    }
 
     /** items × filterQuery × sortOrder 派生：过滤 + 4 路排序后的可见清单 */
-    val visibleItems: StateFlow<List<Item>> = combine(items, filterQuery, sortOrder) { list, q, sort ->
+    val visibleItems: StateFlow<List<Item>> = combine(items, _filterQuery, _sortOrder) { list, q, sort ->
         list.asSequence()
             .filter {
                 q.isBlank() ||

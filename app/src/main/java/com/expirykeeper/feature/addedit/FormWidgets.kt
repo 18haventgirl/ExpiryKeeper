@@ -39,10 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
+import com.expirykeeper.core.domain.dateZh
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /** 表单分区卡：SectionHeader 式大标题 + 统一内边距，四段式布局的容器 */
 @Composable
@@ -118,7 +118,7 @@ fun DateField(label: String, value: LocalDate?, onValue: (LocalDate?) -> Unit) {
     var showPicker by remember { mutableStateOf(false) }
     OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
         Text(
-            value?.let { "$label：${it.format(DateTimeFormatter.ISO_DATE)}" } ?: "$label（点击选择）",
+            value?.let { "$label：${dateZh(it, LocalDate.now())}" } ?: "$label（点击选择）",
             maxLines = 1,
         )
     }

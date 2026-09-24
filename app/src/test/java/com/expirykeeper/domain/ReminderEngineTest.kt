@@ -5,6 +5,7 @@ import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.domain.daysCaption
+import com.expirykeeper.core.domain.dateZh
 import com.expirykeeper.core.domain.ringSpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -196,5 +197,16 @@ class ReminderEngineTest {
         val consumable = Item(id = "c9", name = "猫粮", categoryId = "pet",
             reminderKind = ReminderKind.CONSUMABLE, quantity = 1.2, lowStockThreshold = 2.0)
         assertNull(ReminderEngine.dueDayOf(consumable))
+    }
+
+    // ---- 4a 日期显示统一：本年省年份，跨年必须带年份 ----
+
+    @Test fun dateZhDropsTheYearWithinThisYear() {
+        assertEquals("9月20日", dateZh(LocalDate.of(2026, 9, 20), today))
+    }
+
+    @Test fun dateZhKeepsTheYearAcrossYears() {
+        assertEquals("2027年1月5日", dateZh(LocalDate.of(2027, 1, 5), today))
+        assertEquals("2025年12月31日", dateZh(LocalDate.of(2025, 12, 31), today))
     }
 }

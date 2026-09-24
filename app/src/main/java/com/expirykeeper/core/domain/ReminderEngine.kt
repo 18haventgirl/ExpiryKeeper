@@ -3,6 +3,8 @@ package com.expirykeeper.core.domain
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY }
 
@@ -25,6 +27,15 @@ data class Reminder(
     val overdueDays: Long,
     val notificationId: Int,
 )
+
+/**
+ * 中文日期：本年只写「9月20日」，跨年补年份 —— 家人看到孤零零的「1月5日」会想不起是哪年。
+ * 取代此前散落的 ISO_DATE / yyyy-MM-dd / M月d日 三种写法。
+ */
+fun dateZh(day: LocalDate, today: LocalDate): String {
+    val pattern = if (day.year == today.year) "M月d日" else "yyyy年M月d日"
+    return day.format(DateTimeFormatter.ofPattern(pattern, Locale.CHINA))
+}
 
 /** 相对天数中文文案（修 A5：清单尾部不再挂一个看不出意思的「—」） */
 fun daysCaption(daysLeft: Long): String = when {

@@ -80,7 +80,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                             DropdownMenuItem(
                                 text = { Text(option.label) },
                                 onClick = {
-                                    vm.sortOrder.value = option
+                                    vm.setSortOrder(option)
                                     menuOpen = false
                                 },
                                 trailingIcon = if (option == sort) {
@@ -98,7 +98,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
         // 会把已过滤出的结果盖住（SearchBar 收起态还会把状态栏 inset 再垫一遍）
         SearchBarDefaults.InputField(
             query = query,
-            onQueryChange = { vm.filterQuery.value = it },
+            onQueryChange = { vm.setFilterQuery(it) },
             onSearch = { focusManager.clearFocus() },
             expanded = false,
             onExpandedChange = {},
@@ -108,7 +108,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                 null
             } else {
                 {
-                    IconButton(onClick = { vm.filterQuery.value = "" }) {
+                    IconButton(onClick = { vm.setFilterQuery("") }) {
                         Icon(Icons.Filled.Close, contentDescription = "清空搜索")
                     }
                 }
