@@ -20,6 +20,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -61,13 +62,13 @@ fun CategoryStrip(selected: String, onPick: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Categories.all.forEach { preset: CategoryPreset ->
-            PCategoryChip(preset = preset, selected = preset.id == selected, onPick = onPick)
+            CategoryChip(preset = preset, selected = preset.id == selected, onPick = onPick)
         }
     }
 }
 
 @Composable
-private fun PCategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (String) -> Unit) {
+private fun CategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (String) -> Unit) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     Column(
@@ -75,6 +76,7 @@ private fun PCategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (St
             .width(68.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(bg, RoundedCornerShape(16.dp))
+            .minimumInteractiveComponentSize()
             .clickable { onPick(preset.id) }
             .padding(vertical = 10.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

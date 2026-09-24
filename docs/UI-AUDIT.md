@@ -172,8 +172,29 @@
 - **B17 保存/取消宽度失衡**：保存 `weight(1f)`、取消为文本按钮 —— filled + text 配对本身就会宽度不等，属 M3 常规模式，暂不改
 - **B9 触控尺寸子项**：`EmojiRow`/`CategoryStrip` 自绘 chip 视觉高约 36-38dp，需 `minimumInteractiveComponentSize()` 扩触控区，留待第 4 批与 token 收敛一起做
 
-### 第 4 批 · 资产化（C + D 差距 6）
-- [ ] `EkSpacing`/`EkCard`/`Pill`/`KeyValueRow` token 与组件收敛
-- [ ] `FormWidgets.kt` 上收 designsystem；日期格式统一；VM 方法替代直写
-- [ ] B14 fontScale 适配
-- [ ] 引入 frontend-design 审美红线做 checklist；评估截图回归
+### 第 4 批 · 资产化 ✅ 已完成
+
+**4a 可测的逻辑**
+- `dateZh(day, today)`：本年「9月20日」、跨年「2027年1月5日」，取代散落的 `ISO_DATE` / `yyyy-MM-dd` / `M月d日` 三种写法（详情浮层、日期按钮、保质期预览、事件流水四处）。事件流水那列改 `widthIn(72..132.dp)` 以容纳偶发的长格式。
+- DetailSheet 的「剩余」自己重写了一遍逾期/今天/N 天文案 —— 改回复用 `daysCaption`。
+- `filterQuery` / `sortOrder` 由公开 `MutableStateFlow` 改为私有 + `setFilterQuery()` / `setSortOrder()`：直写从「约定不要」变成**编译不过**。
+
+**4b 组件收敛**
+- 新增 `EkCard(title, modifier, containerColor)`：`ItemCard` / `FormCard` / `SettingsCard` / `HeroCard` 此前各自复制同一份 Card 配置（large 圆角 + surfaceContainerHigh + 零阴影），现在卡片契约只有一处；`FormCard`、`SettingsCard` 两个包装器删除。
+- 新增 `KeyValueRow`：`DetailSheet.KvRow` 与 `SettingsScreen.KvLine` 除标签宽度（96/120dp）外逐字节相同，统一为 104dp 默认 + 可覆盖。
+- 新增 `Pill(tone, label)` + `NeutralTone()`：`NeutralPill` 删除，`StatusPill` 变成 `Pill(StatusTone(s), label)` 的一行包装。
+- **明确否决 `EkSpacing`**：把可读的 `16.dp` 换成六个人人可覆盖的常量是 churn 不是设计系统；真正偏离节奏的野值已在 3c 收敛到 4/8/12/16/24/32。
+- 顺手清 lint：5 处 `ModifierParameter`（modifier 须为首个可选参数）全部排正，含 `DueRing`/`BigHeader`/`SectionHeader`/`ItemCard`/`EkCard`/`QuickActions` 签名调整。**lint warning 16 → 13**。
+
+**4c 无障碍与整洁**
+- `EmojiRow` 与 `CategoryChip` 自绘 chip 加 `minimumInteractiveComponentSize()`：视觉尺寸不变、触控区扩到 ≥48dp（1.3 倍字号下实测 chip 高 168px = 64dp）。
+- Hero 三统计 `Row` → `FlowRow`：大字号下换行而非裁切。实测 `font_scale=1.3` 时三者仍在同一行（最右 x=583 < 1038），无溢出。
+- `PCategoryChip` → `CategoryChip`（历史 P 前缀）。
+- SettingsScreen 删掉嵌套 Scaffold 后残留的整块 +4 缩进（88 行），**用 `git diff -w` 证明是纯空白改动并单独提交**。
+
+**门禁**：49 单测全绿、lint 0 error / 13 warning、`scripts/smoke-routes.sh` 六条路径全过、`font_scale` 已还原 1.0。
+
+### 剩余可选项（未列入任何批次，需要时再议）
+- 视觉回归测试（对照 NIA 的 light/dark × dynamic/static 四组截图）：需要引入 Roborazzi 或 Paparazzi 依赖，属独立工程项
+- `QuickActions` 的图标语义可再打磨（「续期」用 `Autorenew` 还是 `Refresh`）
+- 清单排序当前只有一个 Sort 图标，看不见当前方式（可换 `TextButton("按到期" + ExpandMore)`）

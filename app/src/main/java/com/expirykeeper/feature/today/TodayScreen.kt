@@ -5,6 +5,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -140,12 +142,15 @@ fun TodayScreen(
  * Hero 卡：三列统计走「一处下重注」的编辑式层级 —— 待处理是主数字（headlineLarge），
  * 两周内/全部是次级语境（headlineSmall + 次要色），避免三个 40sp 同权重互相抵消（修 B6）。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
     EkCard(title = null, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
-        Row(
+        // FlowRow 而非 Row：大字号（长辈模式 200%）下三个统计会换行而不是被裁（修 B14）
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             HeroStat(pending.toString(), "待处理", prominent = true)
             HeroStat(upcoming.toString(), "两周内", prominent = false)
