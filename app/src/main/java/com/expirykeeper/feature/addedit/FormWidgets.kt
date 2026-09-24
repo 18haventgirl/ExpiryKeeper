@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
+import com.expirykeeper.core.data.SubCategory
 import com.expirykeeper.core.domain.dateZh
 import java.time.Instant
 import java.time.LocalDate
@@ -63,6 +65,28 @@ fun CategoryStrip(selected: String, onPick: (String) -> Unit) {
     ) {
         Categories.all.forEach { preset: CategoryPreset ->
             CategoryChip(preset = preset, selected = preset.id == selected, onPick = onPick)
+        }
+    }
+}
+
+/** 常见物品模板行：点一下预填名称/emoji/保质期。模板只是录入加速器，不落库 */
+@Composable
+fun SubCategoryStrip(templates: List<SubCategory>, onPick: (SubCategory) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "常见",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        templates.forEach { sub ->
+            AssistChip(
+                onClick = { onPick(sub) },
+                label = { Text("${sub.emoji} ${sub.name}") },
+            )
         }
     }
 }

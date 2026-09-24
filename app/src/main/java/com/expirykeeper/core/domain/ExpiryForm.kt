@@ -2,10 +2,21 @@ package com.expirykeeper.core.domain
 
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.core.data.SubCategory
 import java.time.LocalDate
 
 /** 到期规则的两种录入方式（表单态，不落库） */
 enum class ExpiryFormMode { DATE, OPENED }
+
+/** 点「常见物品」模板后要写进表单的内容（不落库，纯录入加速器） */
+data class TemplateFill(
+    val name: String,
+    val emoji: String,
+    /** EXPIRY=保质期天数；RECURRING=续费周期；CONSUMABLE 恒为 null（该类型没有时间维度） */
+    val days: Int?,
+    val useOpenedMode: Boolean,
+    val openedDate: LocalDate?,
+)
 
 /** 规则区当前输入（纯数据）：表单与单测共用同一份校验入口 */
 data class RuleState(
@@ -45,6 +56,22 @@ object ExpiryForm {
 
     /** 自定义天数文本 → 合法整数或 null（非数字/越界一律 null，由 UI 显示行内错误） */
     fun parseDays(text: String): Int? = text.trim().toIntOrNull()?.takeIf { it in ShelfLifeRange }
+
+    /**
+     * 常见物品模板 → 表单预填。三条规则由单测钉住：
+     * 名字只在用户还没输入时才填（不覆盖手打的）；CONSUMABLE 不编造保质期；
+     * 只有 EXPIRY 才切到「开封+保质期」并把开封日定为今天。
+     */
+    fun planFill(sub: SubCategory, existingName: String, kind: ReminderKind, today: LocalDate): TemplateFill {
+        val shelfLifeApplies = kind == ReminderKind.EXPIRY && sub.days != null
+        return TemplateFill(
+            name = existingName.ifBlank { sub.name },
+            emoji = sub.emoji,
+            days = if (kind == ReminderKind.CONSUMABLE) null else sub.days,
+            useOpenedMode = shelfLifeApplies,
+            openedDate = if (shelfLifeApplies) today else null,
+        )
+    }
 
     /** 规则区缺什么：null 表示规则完整（自 AddEditScreen 抽出，修 A3 时一并可测） */
     fun ruleError(s: RuleState): String? = when (s.kind) {

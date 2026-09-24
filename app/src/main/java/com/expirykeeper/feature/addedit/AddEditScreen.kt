@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.core.data.SubCategory
 import com.expirykeeper.core.domain.ExpiryForm
 import com.expirykeeper.core.domain.ExpiryFormMode
 import com.expirykeeper.core.domain.RuleState
@@ -156,6 +157,29 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
         shelfChoice = null; shelfCustom = false; shelfText = ""
     }
 
+    /** 常见物品模板：一次点击填好名称/emoji/天数，用户随后可改（模板不落库） */
+    fun applyTemplate(sub: SubCategory) {
+        val fill = ExpiryForm.planFill(sub, name, cat.reminderKind, LocalDate.now())
+        name = fill.name
+        emoji = fill.emoji
+        when (cat.reminderKind) {
+            ReminderKind.EXPIRY -> if (fill.days != null) {
+                val days = fill.days
+                expiryMode = ExpiryFormMode.OPENED
+                openedDate = fill.openedDate
+                shelfChoice = days.takeIf { it in cat.defaultShelfLifeChoicesDays }
+                shelfCustom = shelfChoice == null
+                shelfText = if (shelfCustom) days.toString() else ""
+            }
+            ReminderKind.RECURRING -> fill.days?.let { days ->
+                recurrenceChoice = days.takeIf { it in RecurrenceChoices }
+                recurrenceCustom = recurrenceChoice == null
+                recurrenceText = if (recurrenceCustom) days.toString() else ""
+            }
+            ReminderKind.CONSUMABLE -> Unit
+        }
+    }
+
     fun switchExpiryMode(mode: ExpiryFormMode) {
         expiryMode = mode
         // 开封模式默认今天：牛奶路径"分段→chip→保存"零键盘
@@ -214,7 +238,12 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             modifier = Modifier.padding(top = 8.dp),
         )
 
-        EkCard("品类") { CategoryStrip(selected = categoryId, onPick = { pickCategory(it) }) }
+        EkCard("品类") {
+            CategoryStrip(selected = categoryId, onPick = { pickCategory(it) })
+            if (cat.subcategories.isNotEmpty()) {
+                SubCategoryStrip(cat.subcategories) { applyTemplate(it) }
+            }
+        }
 
         EkCard("名称与图标") {
             Row(verticalAlignment = Alignment.CenterVertically) {
