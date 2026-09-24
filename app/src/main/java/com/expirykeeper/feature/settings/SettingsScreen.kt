@@ -171,107 +171,107 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
     ) {
         BigHeader(title = "设置", subtitle = "提醒权限 · 外观 · 数据", onBack = onBack)
 
-            EkCard("提醒权限状态") {
-                PermissionRow(
-                    ok = notificationsGranted,
-                    title = "通知权限",
-                    descOn = "已授权，提醒可正常弹出",
-                    descOff = "未授权，通知不会显示 · 点击去开启",
-                    onClick = { if (!notificationsGranted) openSystemSettings(Settings.ACTION_APP_NOTIFICATION_SETTINGS) },
-                )
-                PermissionRow(
-                    ok = exactAlarmsAllowed,
-                    title = "精确闹钟",
-                    descOn = if (Build.VERSION.SDK_INT >= 31) "已允许，提醒将准时触发" else "当前系统默认允许",
-                    descOff = "未允许，提醒可能被系统延迟 · 点击去设置",
-                    onClick = {
-                        if (exactAlarmsAllowed || Build.VERSION.SDK_INT < 31) Unit else
-                            openSystemSettings(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+        EkCard("提醒权限状态") {
+            PermissionRow(
+                ok = notificationsGranted,
+                title = "通知权限",
+                descOn = "已授权，提醒可正常弹出",
+                descOff = "未授权，通知不会显示 · 点击去开启",
+                onClick = { if (!notificationsGranted) openSystemSettings(Settings.ACTION_APP_NOTIFICATION_SETTINGS) },
+            )
+            PermissionRow(
+                ok = exactAlarmsAllowed,
+                title = "精确闹钟",
+                descOn = if (Build.VERSION.SDK_INT >= 31) "已允许，提醒将准时触发" else "当前系统默认允许",
+                descOff = "未允许，提醒可能被系统延迟 · 点击去设置",
+                onClick = {
+                    if (exactAlarmsAllowed || Build.VERSION.SDK_INT < 31) Unit else
+                        openSystemSettings(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                },
+            )
+        }
+
+        EkCard("外观") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("动态取色", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "跟随壁纸生成配色，关闭后回落品牌 teal",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = dynamicColor,
+                    onCheckedChange = {
+                        dynamicColor = it
+                        vm.setDynamicColor(it)
+                        context.findActivity()?.recreate()
                     },
                 )
             }
-
-            EkCard("外观") {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("动态取色", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "跟随壁纸生成配色，关闭后回落品牌 teal",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = dynamicColor,
-                        onCheckedChange = {
-                            dynamicColor = it
-                            vm.setDynamicColor(it)
-                            context.findActivity()?.recreate()
-                        },
-                    )
-                }
-            }
-
-            EkCard("数据") {
-                Text(
-                    "导出为 JSON 文件；恢复时与本地数据按最后写入时间合并，绝不清空现有数据。",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
-                            busy = true
-                            status = "正在处理…"
-                            exportLauncher.launch("expiry-keeper-backup.json")
-                        },
-                    ) { Text("导出备份") }
-                    OutlinedButton(
-                        enabled = !busy,
-                        onClick = {
-                            busy = true
-                            status = "正在处理…"
-                            importLauncher.launch(arrayOf("application/json"))
-                        },
-                    ) { Text("导入恢复") }
-                }
-                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            EkCard("概览") {
-                KeyValueRow("总件数", "${items.size} 件")
-                KeyValueRow("30 天处理次数", "$rollCount 次")
-                Text("品类分布", style = MaterialTheme.typography.labelLarge)
-                val grouped = items.groupingBy { it.categoryId }.eachCount()
-                if (grouped.isEmpty()) {
-                    Text("暂无物品", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Categories.all
-                            .filter { grouped.containsKey(it.id) }
-                            .forEach { c -> Text("${c.emoji}×${grouped.getValue(c.id)}", style = MaterialTheme.typography.bodyMedium) }
-                        grouped.filterKeys { Categories.byId(it) == null }.values.forEach { n ->
-                            Text("❓×$n", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-
-            EkCard("关于") {
-                Text("到期管家（工程版）", style = MaterialTheme.typography.titleMedium)
-                val version = remember {
-                    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "未知"
-                }
-                Text("版本 $version", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "本地优先的到期提醒管家：数据只存在本机，删除可撤销，备份可迁移。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
         }
+
+        EkCard("数据") {
+            Text(
+                "导出为 JSON 文件；恢复时与本地数据按最后写入时间合并，绝不清空现有数据。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        status = "正在处理…"
+                        exportLauncher.launch("expiry-keeper-backup.json")
+                    },
+                ) { Text("导出备份") }
+                OutlinedButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        status = "正在处理…"
+                        importLauncher.launch(arrayOf("application/json"))
+                    },
+                ) { Text("导入恢复") }
+            }
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        EkCard("概览") {
+            KeyValueRow("总件数", "${items.size} 件")
+            KeyValueRow("30 天处理次数", "$rollCount 次")
+            Text("品类分布", style = MaterialTheme.typography.labelLarge)
+            val grouped = items.groupingBy { it.categoryId }.eachCount()
+            if (grouped.isEmpty()) {
+                Text("暂无物品", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Categories.all
+                        .filter { grouped.containsKey(it.id) }
+                        .forEach { c -> Text("${c.emoji}×${grouped.getValue(c.id)}", style = MaterialTheme.typography.bodyMedium) }
+                    grouped.filterKeys { Categories.byId(it) == null }.values.forEach { n ->
+                        Text("❓×$n", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+
+        EkCard("关于") {
+            Text("到期管家（工程版）", style = MaterialTheme.typography.titleMedium)
+            val version = remember {
+                runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "未知"
+            }
+            Text("版本 $version", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "本地优先的到期提醒管家：数据只存在本机，删除可撤销，备份可迁移。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
 }
 
 
