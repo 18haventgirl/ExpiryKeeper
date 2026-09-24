@@ -44,7 +44,7 @@ fun CountPill(count: Int, modifier: Modifier = Modifier) {
 
 /** 分组标题：titleLarge + 可选尾部计数。间距交给容器 arrangement 决定，组件不自带 padding（修 B8） */
 @Composable
-fun SectionHeader(text: String, count: Int? = null, modifier: Modifier = Modifier) {
+fun SectionHeader(text: String, modifier: Modifier = Modifier, count: Int? = null) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.titleLarge)
         if (count != null) {
@@ -80,9 +80,9 @@ fun EmptyState(emoji: String, title: String, hint: String, modifier: Modifier = 
 @Composable
 fun BigHeader(
     title: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Column(

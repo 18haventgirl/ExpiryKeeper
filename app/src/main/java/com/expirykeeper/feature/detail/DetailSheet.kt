@@ -43,6 +43,9 @@ import com.expirykeeper.core.domain.dateZh
 import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.ui.designsystem.KeyValueRow
+import com.expirykeeper.core.ui.designsystem.NeutralTone
+import com.expirykeeper.core.ui.designsystem.Pill
 import com.expirykeeper.core.ui.designsystem.QuickActions
 import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusPill
@@ -125,29 +128,29 @@ private fun DetailContent(
     if (reminder != null) {
         StatusPill(reminder.status, reminder.status.labelZh)
     } else {
-        NeutralPill("节奏正常")
+        Pill(NeutralTone(), "节奏正常")
     }
 
     // 键值行
     val expire = ReminderEngine.effectiveExpireDay(item)
     if (expire != null) {
-        KvRow("到期日", dateZh(LocalDate.ofEpochDay(expire), today))
-        KvRow("剩余", daysCaption(expire - today.toEpochDay()))
+        KeyValueRow("到期日", dateZh(LocalDate.ofEpochDay(expire), today))
+        KeyValueRow("剩余", daysCaption(expire - today.toEpochDay()))
     }
     if (item.openedAtEpochDay != null || item.shelfLifeDays != null) {
         val opened = item.openedAtEpochDay?.let { dateZh(LocalDate.ofEpochDay(it), today) } ?: "—"
         val life = item.shelfLifeDays?.let { "保质期 $it 天" } ?: "未设保质期"
-        KvRow("开封 / 保质期", "$opened / $life")
+        KeyValueRow("开封 / 保质期", "$opened / $life")
     }
-    item.nextDueAtEpochDay?.let { KvRow("下次续费", dateZh(LocalDate.ofEpochDay(it), today)) }
-    item.recurrenceDays?.let { KvRow("周期", "每 $it 天") }
+    item.nextDueAtEpochDay?.let { KeyValueRow("下次续费", dateZh(LocalDate.ofEpochDay(it), today)) }
+    item.recurrenceDays?.let { KeyValueRow("周期", "每 $it 天") }
     item.quantity?.let { q ->
         val num = if (q % 1.0 == 0.0) q.toInt().toString() else q.toString()
-        KvRow("数量", "$num ${item.unit ?: ""}".trim())
+        KeyValueRow("数量", "$num ${item.unit ?: ""}".trim())
     }
-    item.lowStockThreshold?.let { KvRow("低库存线", if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) }
-    item.barcode?.takeIf { it.isNotBlank() }?.let { KvRow("条码", it) }
-    item.note?.takeIf { it.isNotBlank() }?.let { KvRow("备注", it) }
+    item.lowStockThreshold?.let { KeyValueRow("低库存线", if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) }
+    item.barcode?.takeIf { it.isNotBlank() }?.let { KeyValueRow("条码", it) }
+    item.note?.takeIf { it.isNotBlank() }?.let { KeyValueRow("备注", it) }
 
     // 快速操作行：与今日屏共用一份组件（snooze/handle 依赖 Reminder 快照，无提醒时只留续期）
     QuickActions(
@@ -194,34 +197,8 @@ private fun DetailContent(
     }
 }
 
-@Composable
-private fun KvRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp),
-        )
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-    }
-}
 
 /** 无提醒时的中性状态胶囊（与 StatusPill 同形状，surfaceVariant 底） */
-@Composable
-private fun NeutralPill(label: String) {
-    Box(
-        Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(
-            label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-        )
-    }
-}
 
 private fun eventKindLabel(kind: String): String = when (kind) {
     "add" -> "添加"

@@ -18,8 +18,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +34,7 @@ import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.domain.RingSpec
 import com.expirykeeper.core.domain.ringSpec
 import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.core.ui.designsystem.DueRing
 import com.expirykeeper.core.ui.designsystem.EmptyState
 import com.expirykeeper.core.ui.designsystem.ItemCard
@@ -91,7 +90,7 @@ fun TodayScreen(
             item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }
         }
         if (urgent.isNotEmpty()) {
-            item { SectionHeader("紧急", urgent.size, modifier = Modifier.padding(top = 16.dp)) }
+            item { SectionHeader("紧急", count = urgent.size, modifier = Modifier.padding(top = 16.dp)) }
             items(urgent, key = { it.notificationId }) { r ->
                 ReminderCard(
                     item = r.item,
@@ -111,7 +110,7 @@ fun TodayScreen(
             }
         }
         if (soon.isNotEmpty()) {
-            item { SectionHeader("即将到期", soon.size, modifier = Modifier.padding(top = 16.dp)) }
+            item { SectionHeader("即将到期", count = soon.size, modifier = Modifier.padding(top = 16.dp)) }
             items(soon, key = { "soon-${it.first.id}" }) { (soonItem, days) ->
                 ReminderCard(
                     item = soonItem,
@@ -123,7 +122,7 @@ fun TodayScreen(
             }
         }
         if (attention.isNotEmpty()) {
-            item { SectionHeader("需要关注", attention.size, modifier = Modifier.padding(top = 16.dp)) }
+            item { SectionHeader("需要关注", count = attention.size, modifier = Modifier.padding(top = 16.dp)) }
             items(attention, key = { it.notificationId }) { r ->
                 ReminderCard(
                     item = r.item,
@@ -143,12 +142,7 @@ fun TodayScreen(
  */
 @Composable
 private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
+    EkCard(title = null, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),

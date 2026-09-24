@@ -21,9 +21,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun QuickActions(
     onRollForward: () -> Unit,
+    modifier: Modifier = Modifier,
     onSnooze: (() -> Unit)?,
     onHandle: (() -> Unit)?,
-    modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ActionChip(Icons.Filled.Autorenew, "续期", onRollForward)

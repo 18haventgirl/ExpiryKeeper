@@ -133,7 +133,11 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                 if (sort == ItemSort.CATEGORY) {
                     groupedCategories(visible).forEach { (rawId, cat, list) ->
                         item(key = "group-$rawId") {
-                            SectionHeader("${cat.emoji} ${cat.name}", list.size, modifier = Modifier.animateItem().padding(top = 16.dp))
+                            SectionHeader(
+                                "${cat.emoji} ${cat.name}",
+                                count = list.size,
+                                modifier = Modifier.animateItem().padding(top = 16.dp),
+                            )
                         }
                         items(list, key = { it.id }) { item ->
                             ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())

@@ -42,6 +42,7 @@ import com.expirykeeper.core.domain.ExpiryForm
 import com.expirykeeper.core.domain.ExpiryFormMode
 import com.expirykeeper.core.domain.RuleState
 import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 
@@ -213,9 +214,9 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             modifier = Modifier.padding(top = 8.dp),
         )
 
-        FormCard("品类") { CategoryStrip(selected = categoryId, onPick = { pickCategory(it) }) }
+        EkCard("品类") { CategoryStrip(selected = categoryId, onPick = { pickCategory(it) }) }
 
-        FormCard("名称与图标") {
+        EkCard("名称与图标") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
@@ -230,7 +231,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        FormCard("到期规则") {
+        EkCard("到期规则") {
             when (cat.reminderKind) {
                 ReminderKind.EXPIRY -> ExpiryRuleSection(
                     shelfChoices = cat.defaultShelfLifeChoicesDays
@@ -270,7 +271,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             ErrorLine(shownRuleErr)
         }
 
-        FormCard("更多设置") {
+        EkCard("更多设置") {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { moreOpen = !moreOpen },
                 verticalAlignment = Alignment.CenterVertically,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -62,10 +63,56 @@ fun StatusTone(status: DueStatus): Tone = when (status) {
         Tone(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
 }
 
-/** 大圆角胶囊状态标签 */
+/** 中性 tone：无状态语义的容器/内容色对（此前各处手写 surfaceVariant + onSurfaceVariant） */
 @Composable
-fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) {
-    val tone = StatusTone(status)
+fun NeutralTone(): Tone = Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+
+/**
+ * 全应用卡片容器唯一实现：large 圆角 + tonal 表面，**不叠阴影**（M3 里 filled 容器与阴影
+ * 是两种抬升信号，同时用会互相抵消）。此前 ItemCard/FormCard/SettingsCard/HeroCard 各抄一份。
+ * 传 title 即得「分区卡」；不传即得纯容器。
+ */
+@Composable
+fun EkCard(
+    title: String?,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        if (title != null) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+/** 键值行：标签列定宽对齐，值列吃剩余宽度（DetailSheet.KvRow 与设置页.KvLine 的合并） */
+@Composable
+fun KeyValueRow(label: String, value: String, modifier: Modifier = Modifier, labelWidth: Dp = 104.dp) {
+    Row(modifier.fillMaxWidth()) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(labelWidth),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 状态胶囊：容器底 + 居中短文本。StatusPill / 中性胶囊共用这一份 */
+@Composable
+fun Pill(tone: Tone, label: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .background(tone.container, RoundedCornerShape(50))
@@ -79,13 +126,19 @@ fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) 
     }
 }
 
+/** 大圆角胶囊状态标签 */
+@Composable
+fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) {
+    Pill(StatusTone(status), label, modifier)
+}
+
 /**
  * 到期环：只渲染 `ringSpec` 算出的文本与弧，配色跟随状态 tone。
  * 修 A4：此前恒用 primary + daysLeft/14，逾期与「今天到期」长得一模一样。
  * 文本超过两位时降字号，避免 44dp 圆内裁字（如逾期 200 天）。
  */
 @Composable
-fun DueRing(spec: RingSpec, tone: Tone, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+fun DueRing(spec: RingSpec, tone: Tone, modifier: Modifier = Modifier, size: Dp = 44.dp) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val textStyle = if (spec.text.length <= 2) {
         MaterialTheme.typography.headlineSmall
@@ -126,8 +179,8 @@ fun ItemCard(
     item: Item,
     icon: String,
     tone: Tone,
-    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     /** 副标题覆盖：不传则回退 位置/备注 */
     detail: String? = null,
     trailing: @Composable () -> Unit,
@@ -135,14 +188,7 @@ fun ItemCard(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "itemCardPress")
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(scale),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
+    EkCard(title = null, modifier = modifier.scale(scale)) {
         val clickModifier = if (onClick != null) {
             Modifier.clickable(
                 interactionSource = interactionSource,

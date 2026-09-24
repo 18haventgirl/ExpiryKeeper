@@ -31,8 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -60,6 +58,8 @@ import com.expirykeeper.App
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.BackupFormatException
 import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.EkCard
+import com.expirykeeper.core.ui.designsystem.KeyValueRow
 import com.expirykeeper.ui.ItemsViewModel
 import java.io.IOException
 
@@ -171,7 +171,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
     ) {
         BigHeader(title = "设置", subtitle = "提醒权限 · 外观 · 数据", onBack = onBack)
 
-            SettingsCard("提醒权限状态") {
+            EkCard("提醒权限状态") {
                 PermissionRow(
                     ok = notificationsGranted,
                     title = "通知权限",
@@ -191,7 +191,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 )
             }
 
-            SettingsCard("外观") {
+            EkCard("外观") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("动态取色", style = MaterialTheme.typography.bodyLarge)
@@ -212,7 +212,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 }
             }
 
-            SettingsCard("数据") {
+            EkCard("数据") {
                 Text(
                     "导出为 JSON 文件；恢复时与本地数据按最后写入时间合并，绝不清空现有数据。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -238,9 +238,9 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            SettingsCard("概览") {
-                KvLine("总件数", "${items.size} 件")
-                KvLine("30 天处理次数", "$rollCount 次")
+            EkCard("概览") {
+                KeyValueRow("总件数", "${items.size} 件")
+                KeyValueRow("30 天处理次数", "$rollCount 次")
                 Text("品类分布", style = MaterialTheme.typography.labelLarge)
                 val grouped = items.groupingBy { it.categoryId }.eachCount()
                 if (grouped.isEmpty()) {
@@ -257,7 +257,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 }
             }
 
-            SettingsCard("关于") {
+            EkCard("关于") {
                 Text("到期管家（工程版）", style = MaterialTheme.typography.titleMedium)
                 val version = remember {
                     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "未知"
@@ -274,20 +274,6 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
         }
 }
 
-@Composable
-private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            content()
-        }
-    }
-}
 
 @Composable
 private fun PermissionRow(ok: Boolean, title: String, descOn: String, descOff: String, onClick: () -> Unit) {
@@ -317,13 +303,6 @@ private fun PermissionRow(ok: Boolean, title: String, descOn: String, descOff: S
     }
 }
 
-@Composable
-private fun KvLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(120.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-    }
-}
 
 /** 从 Composable 的 Context 层层解包找到宿主 Activity（recreate 用） */
 private fun Context.findActivity(): Activity? {
