@@ -48,7 +48,7 @@
 - UI 审计与四批整改（2026-09-24，分支 `dev/ui` 已推送，详见 `docs/UI-AUDIT.md`）：三路并行取证（代码审查 / 模拟器量化 / GitHub 参考）后，第 1 批修正确性（逾期天数可见、今日「即将到期」与 hero 同源、表单首帧不报红、加载态），第 2 批修结构（详情浮层改根层覆盖、次级页去底栏、清单尾部语义分离、edge-to-edge），第 3 批做质感（tonal 分层去阴影、CountPill 取代红 Badge、排版 role、动效、搜索图标与清除、空态居中、功能 emoji→Material 图标、分隔符统一、长按去重、反馈走 Snackbar），第 4 批资产化（dateZh 统一四处日期、VM 私有状态+setter 让直写变成编译错误、EkCard/Pill/KeyValueRow 收敛四份重复卡片、chip 触控区扩至 48dp、Hero FlowRow 抗大字号）。单测 32 → 49，lint warning 16 → 13、0 error
   - 过程中三次自我纠错并留档：`dialog()` 路由因 Compose 1.12.1 无 `dimAmount` 造成双重压暗而否决；`isLoading` 极性写反导致空态被永久压制（单变量实验定位）；**负 padding 让设置/添加一点即崩**，被用户当场发现 —— 单测与 lint 结构上都抓不到「某屏一进去就崩」，故新增 `scripts/smoke-routes.sh` 全路由冒烟纳入门禁
 - 模拟器纪律与种子数据（2026-09-24）：Studio 里 app 打开后清单空空如也，追查为**开发工具混代**——CLI 用 `-no-snapshot-save` 启同一台 AVD（写盘在退出时被丢弃），Studio 又载入 9 月 22 日的 `default_boot` 快照把磁盘回滚，于是 `expiry-keeper.db`（只有 schema）与 `-wal`（唯一装着数据的帧）来自不同世代，SQLite 判定 WAL 无效直接重置，数据静默消失。**应用侧无 bug**：Room 未开 `fallbackToDestructiveMigration`，logcat 无异常，卸载重装才干净。取证后该快照已被今天的状态覆盖。三条纪律：① 不再用 `run-as sqlite3` 直改数据库（写 WAL 之外的世代是本次元凶之一，且只读打开也会顺带 checkpoint 掉 WAL，毁掉最后一个可恢复物证）；② 需要两台设备时另建 AVD，不与 Studio 抢 `Pixel_9`；③ 造数据走 `SeedDataTest`——在目标进程内经 `ItemRepository.save()`，派生到期日、change_log、events 全都真实生成，id 固定故重复执行是 upsert。7 条种子覆盖逾期/临期/续费今天/低库存/窗口外。注意 `connectedDebugAndroidTest` 跑完会回滚安装（连数据目录一起删），所以种完数据要用 `adb install -r` + `am instrument`，验证完再种一次即可
-- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ ~~备份不携带墓碑~~ **已订正**：`Backup.toJson/parse` 自 v2 起就携带 `deletedAt` 与 `lastModifiedBy`，恢复不会复活删除，M3 同步可直接复用；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）；⑦ `SyncMerge` 平局取 incoming（`inc.updatedAt >= cur.updatedAt`），同毫秒并发写时收敛顺序依赖到达次序，M3 需换成 `(updatedAt, deviceId)` 全序。M2 条码、M3 同步仍为未来里程碑
+- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ **已订正并拆分**：备份**格式**自 v2 起就携带 `deletedAt` 与 `lastModifiedBy`，恢复不会复活删除；但导出走 `repo.getAll()`，而它在 SQL 层就 `deletedAt IS NULL` 过滤，所以**备份文件里根本没有墓碑**——手动恢复语义上没问题（时间点还原），M3 同步若照抄这条路径则删除永远传不出去，必须改用 `getAllIncludingTombstones()`；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）；⑦ `SyncMerge` 平局取 incoming（`inc.updatedAt >= cur.updatedAt`，`SyncMerge.kt:14`），同毫秒并发写时收敛顺序依赖到达次序，M3 需换成 `(updatedAt, deviceId)` 全序——**已在 M3 规格 §6.2 展开**，注意恢复路径的 `PREFER_INCOMING` 语义要保住（`tiePrefersIncoming` 是它的护栏）。M2 条码、M3 同步仍为未来里程碑
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
 | 项 | 来源 | 手测步骤 | 通过标准 |
@@ -68,10 +68,12 @@
 - 验收：6 品类各录 3 件真实物品，全家桶提醒正确 —— 常识库上线后录入路径已缩到「选品类 → 点常见 → 保存」两次点击
 
 ### M3 同步协议
-- [ ] change_log 增量导出 / LWW 合并 / 墓碑清理
+- 设计规格：`docs/superpowers/specs/2026-09-24-m3-sync-design.md`（**待用户评审**，评审通过后才写实现计划）
+- [ ] change_log 增量导出 / LWW 合并 / 墓碑清理 → **规格改判**：不做增量、不做游标、不清理墓碑，改为每设备全量快照 + 总序 LWW（理由见规格 §3 与 §7.3），`change_log` 继续只写不读
+- [ ] 总序 LWW 合并（`(updatedAt, lastModifiedBy)` 字典序）+ 收敛性/幂等性测试 + 被丢版本入 `sync_conflicts` 表（schema v2→v3，只增表不动 items）
 - [ ] SyncDriver 接口 + LocalFolderDriver（双目录仿真两设备）
 - [ ] 冲突仿真测试（并发编辑、删除复活、离线回归）
-- 验收：两台设备（仿真）数据最终一致，无丢改
+- 验收：两台设备（仿真 + 双 AVD）数据最终一致，无丢改
 
 ### M4 家庭共享
 - [ ] WebDavDriver（坚果云 / NAS）
