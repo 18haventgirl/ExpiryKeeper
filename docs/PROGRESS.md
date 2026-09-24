@@ -47,7 +47,8 @@
 - 清单搜索栏两处缺陷修复（2026-09-23，合并后首次复测发现）：M3 `SearchBar` 收起态会对 `SearchBarDefaults.windowInsets`（= systemBars Top+Horizontal）做 `windowInsetsPadding`，而 `EkApp` 的 Scaffold 只 pad 不 consume，状态栏 142px 被垫第二遍 → 标题与搜索框之间 184px（≈70dp）死空白；更严重的是 `SearchBar` 激活时展开的结果槽位我们传的是空 `{}`，实测输入 `LED` 时计数显示「1 件」但屏幕渲染 0 行（匹配结果被空面板盖住），搜索在 UI 上等于不可用。改为不展开的 `SearchBarDefaults.InputField`（实时过滤下方列表本就是 Task 9 的设计意图），两个问题一并消除，并接上 IME 搜索键收起键盘。复测：副标题→搜索框间距 184px→63px，首卡上移正好 142px，`LED` 查询渲染出「LED灯泡」行、清空恢复 6 件、32/32 单测 + lint 0 error 无回归
 - UI 审计与四批整改（2026-09-24，分支 `dev/ui` 已推送，详见 `docs/UI-AUDIT.md`）：三路并行取证（代码审查 / 模拟器量化 / GitHub 参考）后，第 1 批修正确性（逾期天数可见、今日「即将到期」与 hero 同源、表单首帧不报红、加载态），第 2 批修结构（详情浮层改根层覆盖、次级页去底栏、清单尾部语义分离、edge-to-edge），第 3 批做质感（tonal 分层去阴影、CountPill 取代红 Badge、排版 role、动效、搜索图标与清除、空态居中、功能 emoji→Material 图标、分隔符统一、长按去重、反馈走 Snackbar），第 4 批资产化（dateZh 统一四处日期、VM 私有状态+setter 让直写变成编译错误、EkCard/Pill/KeyValueRow 收敛四份重复卡片、chip 触控区扩至 48dp、Hero FlowRow 抗大字号）。单测 32 → 49，lint warning 16 → 13、0 error
   - 过程中三次自我纠错并留档：`dialog()` 路由因 Compose 1.12.1 无 `dimAmount` 造成双重压暗而否决；`isLoading` 极性写反导致空态被永久压制（单变量实验定位）；**负 padding 让设置/添加一点即崩**，被用户当场发现 —— 单测与 lint 结构上都抓不到「某屏一进去就崩」，故新增 `scripts/smoke-routes.sh` 全路由冒烟纳入门禁
-- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ 备份不携带墓碑 → 恢复不复活删除，M3 WebDAV 同步需导出墓碑；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）。M2 条码、M3 同步仍为未来里程碑
+- 模拟器纪律与种子数据（2026-09-24）：Studio 里 app 打开后清单空空如也，追查为**开发工具混代**——CLI 用 `-no-snapshot-save` 启同一台 AVD（写盘在退出时被丢弃），Studio 又载入 9 月 22 日的 `default_boot` 快照把磁盘回滚，于是 `expiry-keeper.db`（只有 schema）与 `-wal`（唯一装着数据的帧）来自不同世代，SQLite 判定 WAL 无效直接重置，数据静默消失。**应用侧无 bug**：Room 未开 `fallbackToDestructiveMigration`，logcat 无异常，卸载重装才干净。取证后该快照已被今天的状态覆盖。三条纪律：① 不再用 `run-as sqlite3` 直改数据库（写 WAL 之外的世代是本次元凶之一，且只读打开也会顺带 checkpoint 掉 WAL，毁掉最后一个可恢复物证）；② 需要两台设备时另建 AVD，不与 Studio 抢 `Pixel_9`；③ 造数据走 `SeedDataTest`——在目标进程内经 `ItemRepository.save()`，派生到期日、change_log、events 全都真实生成，id 固定故重复执行是 upsert。7 条种子覆盖逾期/临期/续费今天/低库存/窗口外。注意 `connectedDebugAndroidTest` 跑完会回滚安装（连数据目录一起删），所以种完数据要用 `adb install -r` + `am instrument`，验证完再种一次即可
+- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ ~~备份不携带墓碑~~ **已订正**：`Backup.toJson/parse` 自 v2 起就携带 `deletedAt` 与 `lastModifiedBy`，恢复不会复活删除，M3 同步可直接复用；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）；⑦ `SyncMerge` 平局取 incoming（`inc.updatedAt >= cur.updatedAt`），同毫秒并发写时收敛顺序依赖到达次序，M3 需换成 `(updatedAt, deviceId)` 全序。M2 条码、M3 同步仍为未来里程碑
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
 | 项 | 来源 | 手测步骤 | 通过标准 |
@@ -63,7 +64,7 @@
 - [x] CONSUMABLE / RECURRING 语义（v2 T4 已交付）
 - [x] 品类模板与保质期常识库（2026-09-24：9 品类共 45 条 `SubCategory` 常见物品模板，点一下预填名称/emoji/保质期或续费周期；**模板不落库**，物品不记得用过哪个模板，因此零 schema 变更、零迁移风险。`ExpiryForm.planFill` 三条规则由单测钉住：名字不覆盖手输、CONSUMABLE 不编造保质期、只有 EXPIRY 才切开封模式）
 - [x] 多档提醒偏移、通知渠道分组（v2 T12 已交付）
-- [ ] 条码扫描（MLKit）+ 可选在线查询 —— **暂缓**：MLKit 能解出码但解不出「这是什么商品」，中文条码→品名没有稳定免费 API（spec §8 已预见「失败则降级纯手动填名」），而「条码（选填）」字段现在就能手填；在拿到可用数据源之前，扫描只提供一串数字，价值不抵引入 CameraX+MLKit+相机权限的成本
+- [ ] ~~条码扫描（MLKit）+ 可选在线查询~~ —— **2026-09-24 用户拍板：彻底不做**。MLKit 能解出码但解不出「这是什么商品」，中文条码→品名没有稳定免费 API（spec §8 已预见「失败则降级纯手动填名」），而「条码（选填）」字段现在就能手填；在拿到可用数据源之前，扫描只提供一串数字，价值不抵引入 CameraX+MLKit+相机权限的成本。M2 就此收口，直接进 M3
 - 验收：6 品类各录 3 件真实物品，全家桶提醒正确 —— 常识库上线后录入路径已缩到「选品类 → 点常见 → 保存」两次点击
 
 ### M3 同步协议
