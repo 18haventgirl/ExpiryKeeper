@@ -33,7 +33,8 @@ object NotificationHelper {
 
     /**
      * 取消某物品所有可能的既有通知：notifId 是 (itemId, status, date) 纯函数，
-     * 对 6 种 status × {today, today-1} 重算 cancel（LOW_STOCK 的 id 与日期无关，走 static 变体）。
+     * 对全部 status × {today, today-1} 重算 cancel（走 entries 枚举，加新状态不必改这里；
+     * LOW_STOCK 的 id 与日期无关，走 static 变体）。
      */
     fun cancelItem(ctx: Context, itemId: String) {
         val today = LocalDate.now()
@@ -95,6 +96,7 @@ object NotificationHelper {
                 DueStatus.LOW_STOCK -> "「${reminder.item.name}」库存不足，该补货了"
                 DueStatus.RENEWAL_SOON -> "「${reminder.item.name}」还有 ${reminder.daysLeft} 天扣费"
                 DueStatus.RENEWAL_TODAY -> "「${reminder.item.name}」今天扣费，不需要就取消订阅"
+                DueStatus.RENEWAL_OVERDUE -> "「${reminder.item.name}」扣费日已过 ${reminder.overdueDays} 天，没在用的话记得取消"
             }
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)

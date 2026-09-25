@@ -6,7 +6,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY }
+enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY, RENEWAL_OVERDUE }
 
 /** 到期状态的中文标签：列表 / 详情 / 通知共用（Task 12 前置：自 UI 私有扩展上收） */
 val DueStatus.labelZh: String
@@ -17,6 +17,7 @@ val DueStatus.labelZh: String
         DueStatus.LOW_STOCK -> "库存低"
         DueStatus.RENEWAL_SOON -> "即将续费"
         DueStatus.RENEWAL_TODAY -> "今天续费"
+        DueStatus.RENEWAL_OVERDUE -> "续费逾期"
     }
 
 data class Reminder(
@@ -55,10 +56,21 @@ fun ringSpec(status: DueStatus, daysLeft: Long?, overdueDays: Long, offsets: Lis
     val window = maxOf(14L, offsets.maxOrNull()?.toLong() ?: 0L)
     return when {
         daysLeft == null -> RingSpec("·", 0f)
-        status == DueStatus.OVERDUE -> RingSpec(overdueDays.toString(), 1f)
+        status == DueStatus.OVERDUE || status == DueStatus.RENEWAL_OVERDUE -> RingSpec(overdueDays.toString(), 1f)
         status == DueStatus.DUE_TODAY || status == DueStatus.RENEWAL_TODAY -> RingSpec("今", 0f)
         else -> RingSpec(daysLeft.toString(), (daysLeft.toFloat() / window).coerceIn(0f, 1f))
     }
+}
+
+/** 今日屏的分组归属。用枚举函数而不是两处 `filter`：新增状态时编译器会逼着表态，
+ *  不会再出现"引擎报了、屏幕上根本没有这一类"的静默失踪（RENEWAL_OVERDUE 就是这么漏过一次）。 */
+enum class TodayGroup { URGENT, ATTENTION, SOON_ONLY }
+
+fun DueStatus.todayGroup(): TodayGroup = when (this) {
+    DueStatus.OVERDUE, DueStatus.DUE_TODAY, DueStatus.RENEWAL_OVERDUE -> TodayGroup.URGENT
+    DueStatus.LOW_STOCK, DueStatus.RENEWAL_TODAY -> TodayGroup.ATTENTION
+    // 未到期的" soon" 类不进这两组：它们由今日屏 1..14 天窗口那条路径渲染，见 soonSection
+    DueStatus.DUE_SOON, DueStatus.RENEWAL_SOON -> TodayGroup.SOON_ONLY
 }
 
 /** 纯函数规则引擎：不依赖 Android，输入物品快照 + 今天，输出今天应发的提醒 */
@@ -109,11 +121,14 @@ object ReminderEngine {
         val nextDue = item.nextDueAtEpochDay ?: return null
         val daysLeft = nextDue - today.toEpochDay()
         val status = when {
+            // 扣费日过了就是"续费逾期"，天天报，与 EXPIRY 逾期对称。
+            // 以前这里落到 else → null：订阅一过期就永远静默，而牛奶过期会天天喊。
+            daysLeft < 0 -> DueStatus.RENEWAL_OVERDUE
             daysLeft == 0L -> DueStatus.RENEWAL_TODAY
             daysLeft in 1..7 && item.reminderOffsetsDays.any { off -> daysLeft == off.toLong() } -> DueStatus.RENEWAL_SOON
             else -> return null
         }
-        return Reminder(item, status, daysLeft, 0, notifIdFor(item.id, status, today))
+        return Reminder(item, status, daysLeft.coerceAtLeast(0), (-daysLeft).coerceAtLeast(0), notifIdFor(item.id, status, today))
     }
 
     /** 该物品「下一次该看的日子」：EXPIRY 用到期日（含开封推导），RECURRING 用下次扣费日，CONSUMABLE 无 */

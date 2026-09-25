@@ -34,7 +34,9 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.domain.RingSpec
+import com.expirykeeper.core.domain.TodayGroup
 import com.expirykeeper.core.domain.ringSpec
+import com.expirykeeper.core.domain.todayGroup
 import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.core.ui.designsystem.DueRing
@@ -62,8 +64,9 @@ fun TodayScreen(
 
     // 分组（修 A6）：紧急/需要关注来自引擎提醒；「即将到期」按 1..14 天区间取，与 hero 同一口径。
     // 引擎的 DUE_SOON 只在命中偏移日时触发（通知不该天天发），所以它不能充当列表数据源。
-    val urgent = reminders.filter { it.status == DueStatus.OVERDUE || it.status == DueStatus.DUE_TODAY }
-    val attention = reminders.filter { it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
+    // 归属走 DueStatus.todayGroup()：编译器保证每个状态都有下落，不会有哪类提醒悄悄不上屏。
+    val urgent = reminders.filter { it.status.todayGroup() == TodayGroup.URGENT }
+    val attention = reminders.filter { it.status.todayGroup() == TodayGroup.ATTENTION }
     val soon = ReminderEngine.soonSection(upcoming14, withinDays = 14L)
     val rowCount = urgent.size + soon.size + attention.size
 

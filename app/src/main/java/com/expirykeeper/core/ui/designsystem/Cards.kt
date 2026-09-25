@@ -54,7 +54,7 @@ data class Tone(val container: Color, val content: Color)
 /** DueStatus → M3 容器/内容色映射，全应用状态配色的唯一来源 */
 @Composable
 fun StatusTone(status: DueStatus): Tone = when (status) {
-    DueStatus.OVERDUE, DueStatus.DUE_TODAY ->
+    DueStatus.OVERDUE, DueStatus.DUE_TODAY, DueStatus.RENEWAL_OVERDUE ->
         Tone(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
     DueStatus.DUE_SOON, DueStatus.RENEWAL_SOON ->
         Tone(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)

@@ -4,8 +4,11 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.TodayGroup
+import com.expirykeeper.core.domain.todayGroup
 import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.dateZh
+import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ringSpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -61,6 +64,62 @@ class ReminderEngineTest {
         assertEquals(DueStatus.RENEWAL_SOON, ReminderEngine.computeOne(item, today)!!.status)
         assertEquals(DueStatus.RENEWAL_TODAY, ReminderEngine.computeOne(item.copy(nextDueAtEpochDay = epoch), today)!!.status)
         assertNull(ReminderEngine.computeOne(item.copy(nextDueAtEpochDay = epoch + 4), today))
+    }
+
+    private fun recurringItem(daysToRenew: Long) = Item(
+        id = "r-$daysToRenew", name = "视频会员", categoryId = "subscription",
+        reminderKind = ReminderKind.RECURRING, nextDueAtEpochDay = epoch + daysToRenew,
+        reminderOffsetsDays = listOf(3, 0),
+    )
+
+    /**
+     * 用户验收 2026-09-25 报告的不对称：EXPIRY 逾期天天报，RECURRING 扣费日一过
+     * 引擎返回 null → 订阅过期完全静默，永远不再吭声。
+     */
+    @Test fun `recurring overdue fires instead of going silent`() {
+        val r = ReminderEngine.computeOne(recurringItem(-3), today)!!
+        assertEquals(DueStatus.RENEWAL_OVERDUE, r.status)
+        assertEquals(3L, r.overdueDays)
+        assertEquals(0L, r.daysLeft)
+    }
+
+    /** 报到会多久：每天都报，逾期 200 天也一样——静默只会让遗忘变成长期状态 */
+    @Test fun `recurring overdue keeps firing however long it has been lapsed`() {
+        listOf(-1L, -7L, -200L).forEach { d ->
+            assertEquals(DueStatus.RENEWAL_OVERDUE, ReminderEngine.computeOne(recurringItem(d), today)!!.status)
+        }
+    }
+
+    /** 文案必须与"东西过期了"区分开：订阅没有"检查还能不能用"这回事 */
+    @Test fun `recurring overdue has its own label`() {
+        assertEquals("续费逾期", DueStatus.RENEWAL_OVERDUE.labelZh)
+        assertEquals("逾 5 天", daysCaption(-5))
+    }
+
+    /** 环上显示逾期天数并走满弧，与其它逾期同形 */
+    @Test fun `recurring overdue ring shows days lapsed at full arc`() {
+        val spec = ringSpec(DueStatus.RENEWAL_OVERDUE, 0, 12, listOf(3, 0))
+        assertEquals("12", spec.text)
+        assertEquals(1f, spec.fraction, 0.001f)
+    }
+
+    /** 每个状态在 今日屏 都有下落。引擎加了新状态却没安排分组，就会像 RENEWAL_OVERDUE 一样静默失踪 */
+    @Test fun everyStatusHasAPlaceOnTheTodayScreen() {
+        assertEquals(TodayGroup.URGENT, DueStatus.OVERDUE.todayGroup())
+        assertEquals(TodayGroup.URGENT, DueStatus.DUE_TODAY.todayGroup())
+        assertEquals(TodayGroup.URGENT, DueStatus.RENEWAL_OVERDUE.todayGroup())
+        assertEquals(TodayGroup.ATTENTION, DueStatus.RENEWAL_TODAY.todayGroup())
+        assertEquals(TodayGroup.ATTENTION, DueStatus.LOW_STOCK.todayGroup())
+        assertEquals(TodayGroup.SOON_ONLY, DueStatus.DUE_SOON.todayGroup())
+        assertEquals(TodayGroup.SOON_ONLY, DueStatus.RENEWAL_SOON.todayGroup())
+    }
+
+    /** 静音手段与别的状态一致：今天不再提醒 / 稍后 3 天都得管用 */
+    @Test fun `recurring overdue respects handled and snooze`() {
+        val handled = recurringItem(-2).copy(handledAtEpochDay = epoch, handledStatus = DueStatus.RENEWAL_OVERDUE.name)
+        assertNull(ReminderEngine.computeOne(handled, today))
+        val snoozed = recurringItem(-2).copy(snoozedUntilEpochDay = epoch + 2)
+        assertNull(ReminderEngine.computeOne(snoozed, today))
     }
 
     @Test fun `deleted items never fire`() {
