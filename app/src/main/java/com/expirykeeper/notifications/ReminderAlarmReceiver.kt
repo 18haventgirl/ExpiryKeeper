@@ -43,7 +43,13 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val items = app.container.repository.getAll()
-                NotificationHelper.notifyAll(context, ReminderEngine.computeForDate(items, LocalDate.now()))
+                // 闹钟本身就是"到点了"才响的，所以这条路不再过一遍时刻闸；
+                // 记 lastNotifiedDay 由 postDailyReminders 统一负责，避免当天兜底再弹一遍。
+                NotificationHelper.postDailyReminders(
+                    context,
+                    ReminderEngine.computeForDate(items, LocalDate.now()),
+                    respectSchedule = false,
+                )
                 ReminderScheduler.schedule(context)
             } finally {
                 pending.finish()

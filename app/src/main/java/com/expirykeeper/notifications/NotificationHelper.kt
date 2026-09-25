@@ -7,13 +7,16 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.expirykeeper.App
 import com.expirykeeper.MainActivity
 import com.expirykeeper.R
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.shouldNotifyNow
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 object NotificationHelper {
     const val CHANNEL_ID = "expiry_reminders"
@@ -61,6 +64,29 @@ object NotificationHelper {
                 group = CHANNEL_GROUP_ID
             }
         )
+    }
+
+    /**
+     * 每日提醒的统一出口。
+     *
+     * `respectSchedule = true` 时先过 [shouldNotifyNow] 这道闸——那是 WorkManager 每 24h 的
+     * 兜底路径，它自己的调度时刻和用户设定的时刻无关，不拦就会出现"设了 20:00 却凌晨 3 点弹"。
+     * 精确闹钟本身（正点）和用户操作后的 runNow 传 false：前者就是到点了，后者是用户在
+     * 改数据，理应当场刷新（notifyAll 顺带清扫陈旧子通知，跳过它反而会让旧通知滞留）。
+     */
+    fun postDailyReminders(
+        context: Context,
+        reminders: List<Reminder>,
+        respectSchedule: Boolean,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): Boolean {
+        val prefs = (context.applicationContext as App).container.prefs
+        if (respectSchedule &&
+            !shouldNotifyNow(now, prefs.reminderHour, prefs.reminderMinute, prefs.lastNotifiedDay)
+        ) return false
+        notifyAll(context, reminders)
+        prefs.lastNotifiedDay = now.toLocalDate()
+        return true
     }
 
     fun notifyAll(context: Context, reminders: List<Reminder>) {
