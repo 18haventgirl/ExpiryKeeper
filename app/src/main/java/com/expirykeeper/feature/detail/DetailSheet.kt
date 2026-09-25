@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -56,8 +55,8 @@ import java.time.LocalDate
 /**
  * 详情浮层（Task 11）：挂在 EkApp 根层之上（不是路由，避免来路屏被清空）。
  * 数据源 repo.observeById 实时流；快速操作复用 VM；删除走 deleteWithUndo（Snackbar 可撤销）。
- * 结构：滚动区（头部/键值/快速操作/最近记录）+ 钉底页脚（编辑/删除）——
- * 页脚在滚动区之外，所以它的位置与内容条数无关。
+ * 结构：可滚内容区（头部/键值/快速操作/最近记录）+ 钉在浮层下沿的页脚（编辑/删除）。
+ * 浮层高度随内容自然伸缩（不写死百分比）；页脚在滚动区之外，所以内容再多也滑不走它。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,18 +81,13 @@ fun DetailSheet(
         val current = item
         val live = current.takeIf { it?.deletedAt == null }
 
-        // 浮层高度固定为可用高度的 62%：不随内容条数涨缩，所以页脚（编辑/删除）落在屏幕上
-        // 的位置永远一样。代价是内容少的物品下方会留白——这是"位置稳定"换来的取舍。
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.62f),
-        ) {
-            // 只有这一段滚
+        // 浮层高度仍随内容自然伸缩（不写死百分比）。固定的是**页脚**：
+        // 编辑/删除在滚动区之外，永远贴在浮层下沿；内容超出可显示高度时只有内容滚。
+        Column(Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
                     .padding(top = 4.dp, bottom = 16.dp),
