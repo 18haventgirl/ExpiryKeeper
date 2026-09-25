@@ -58,6 +58,8 @@
   - 导出改用 `getAllIncludingTombstones()`：备份现在保住"删除发生的时间"，恢复后墓碑行的 `deletedAt/updatedAt` 是当初真删那一刻而非恢复那一刻
   - 删掉 `SyncMerge.kt` + `SyncMergeTest.kt`（8 条测试由 `RestoreTest` 7 条接替），并清掉随之失去调用方的 `upsertRaw` / `changeLogSince`
   - 证据：`RestoreTest` 7/7 绿；新增 `RestoreDbTest` 在 in-memory Room 上真跑三件事（旧版本确实盖掉本地更新 / 备份后新增的物品只留墓碑不物理删 / 撤销能换回），2/2 绿；`RoomMigrationTest` 复绿；单测 55 全绿、lint 无新增告警
+  - 真机走查（emulator-5554，`.debug-ui/audit/verify5.js`）：导出→Downloads 里的文件确实带墓碑（你验收时删掉的那盒鲜牛奶以 `deletedAt` 形式在文件里）→ 今日屏「今天不再提醒」处理掉一条（待处理 3→2）→ 导入同一份备份 → 确认框报「写回 7 条物品，重放 1 条删除」→ 替换全部 → 提示条「已恢复：写回 7 条，移出 0 条」→ 点「撤销」→ 回执「已撤销，清单回到恢复之前」，待处理回到 2 = 改动被带回来。**恢复与撤销两条路都肉眼验过**
+  - 过程中我自己两处测试错误（不是 App 问题，记下来防重犯）：用 `label.includes("替换全部")` 找按钮会先命中标题「用这份备份替换全部物品？」，于是"点了三次没反应"其实点的是标题——按钮一律精确匹配；以及第二轮拿同一份内容再导一次，恢复前后数据相同，这种跑法根本测不出撤销，必须先拉开差距（A≠B）再判 D==B
 - 已知遗留（M3/M4 取消后，这就是剩余待办池）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt（撤销恢复的快照用后即清，二次点击不会重复回滚）；④ `activeNotifications` 可加空防御；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）——**这是唯一一处"设置项骗人"，M5 优先修**。（⑤ 备份不携带墓碑、⑦ SyncMerge 平局语义 两项已由上面的恢复语义重做一并解决，编号保留不复用）
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
