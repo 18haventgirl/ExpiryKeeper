@@ -30,12 +30,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.expirykeeper.App
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.BackupFormatException
+import com.expirykeeper.core.domain.RestorePlan
 import com.expirykeeper.core.ui.designsystem.BigHeader
 import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.core.ui.designsystem.KeyValueRow
@@ -143,14 +146,18 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
             busy = false
         }
     }
+    // 导入分两步：先只读地算出恢复计划，确认框点头之后才写库
+    var pendingPlan by remember { mutableStateOf<RestorePlan?>(null) }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            vm.importBackup(uri) { result ->
+            vm.inspectBackup(uri) { result ->
                 busy = false
                 result.fold(
-                    onSuccess = { (written, skipped) -> status = "已恢复 $written 条，跳过 $skipped 条" },
+                    onSuccess = { plan ->
+                        if (plan == null) status = "这份备份里没有任何条目，已取消" else pendingPlan = plan
+                    },
                     onFailure = { e ->
                         status = if (e is BackupFormatException) "备份文件格式不对，未导入任何数据" else "读取文件失败"
                     },
@@ -214,7 +221,8 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
 
         EkCard("数据") {
             Text(
-                "导出为 JSON 文件；恢复时与本地数据按最后写入时间合并，绝不清空现有数据。",
+                "导出为 JSON 文件（含已删除记录）。导入 = 时间点还原：清单会变成导出那一刻的样子，" +
+                    "备份之后新增的物品会被移出。恢复前会先让你确认，并且可以当场撤销。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -236,6 +244,43 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                 ) { Text("导入恢复") }
             }
             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        // 整库替换是不可逆到"下一次导入"为止的破坏性操作：动手之前必须把账目摊开确认
+        pendingPlan?.let { plan ->
+            AlertDialog(
+                onDismissRequest = { pendingPlan = null },
+                title = { Text("用这份备份替换全部物品？") },
+                text = {
+                    Column {
+                        Text("写回 ${plan.liveWritten} 条物品" + if (plan.tombstones > 0) "，重放 ${plan.tombstones} 条删除" else "")
+                        if (plan.removed.isNotEmpty()) {
+                            Text(
+                                "清单里 ${plan.removed.size} 件不在这份备份中，将被移出：" +
+                                    plan.removed.joinToString("、") { it.name }.takeIf { plan.removed.size <= 4 }
+                                        .orEmpty(),
+                            )
+                        }
+                        Text("移出只是暂时收起，不是真删；恢复后当下也能在提示条上点「撤销」全部换回来。")
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingPlan = null
+                            busy = true
+                            vm.applyRestore(plan) { r ->
+                                busy = false
+                                status = r.fold(
+                                    onSuccess = { "已恢复为备份时的状态" },
+                                    onFailure = { "恢复失败，清单未改动" },
+                                )
+                            }
+                        },
+                    ) { Text("替换全部") }
+                },
+                dismissButton = { TextButton(onClick = { pendingPlan = null }) { Text("取消") } },
+            )
         }
 
         EkCard("概览") {

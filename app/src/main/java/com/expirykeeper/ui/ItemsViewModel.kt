@@ -12,6 +12,7 @@ import com.expirykeeper.core.data.ItemSort
 import com.expirykeeper.core.domain.Backup
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.RestorePlan
 import com.expirykeeper.notifications.NotificationHelper
 import com.expirykeeper.notifications.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
@@ -167,12 +168,12 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun getById(id: String): Item? = repo.getById(id)
 
-    /** 导出全部存活条目到 SAF uri；IO 全在 viewModelScope + Dispatchers.IO，回调回到主线程 */
+    /** 导出全量（含墓碑）到 SAF uri；IO 全在 viewModelScope + Dispatchers.IO，回调回到主线程 */
     fun exportBackup(uri: Uri, onDone: (Result<Int>) -> Unit) {
         viewModelScope.launch {
             onDone(runCatching {
                 withContext(Dispatchers.IO) {
-                    val all = repo.getAll()
+                    val all = repo.getAllIncludingTombstones()
                     val json = Backup.toJson(all)
                     val stream = getApplication<Application>().contentResolver.openOutputStream(uri)
                         ?: throw IOException("无法写入所选文件")
@@ -183,18 +184,52 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 导入：整文件先解析校验（Backup.parse 抛类型化异常），任何垃圾数据都不会触碰到库 */
-    fun importBackup(uri: Uri, onDone: (Result<Pair<Int, Int>>) -> Unit) {
+    /**
+     * 恢复第一步：读文件 → 严格解析（垃圾数据一律不入库）→ 与本地比对出[RestorePlan]。
+     * **不写任何东西**，UI 拿计划去弹确认框，用户点头才有第二步。
+     */
+    fun inspectBackup(uri: Uri, onResult: (Result<RestorePlan?>) -> Unit) {
         viewModelScope.launch {
-            onDone(runCatching {
+            onResult(runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = getApplication<Application>().contentResolver.openInputStream(uri)
                         ?: throw IOException("无法读取所选文件")
                     val text = stream.bufferedReader().use { it.readText() }
-                    val incoming = Backup.parse(text)
-                    repo.importMerged(incoming).also { ReminderScheduler.runNow(getApplication()) }
+                    repo.planRestore(Backup.parse(text))
                 }
             })
         }
     }
+
+    /** 恢复第二步：整库替换。动手前把当前全量留在内存，换错了有一次「撤销」 */
+    fun applyRestore(plan: RestorePlan, onDone: (Result<Int>) -> Unit) {
+        viewModelScope.launch {
+            onDone(runCatching {
+                withContext(Dispatchers.IO) {
+                    preRestoreSnapshot = repo.getAllIncludingTombstones()
+                    val written = repo.restore(plan)
+                    ReminderScheduler.runNow(getApplication())
+                    _snackbar.emit(
+                        SnackbarMsg("已恢复：写回 ${plan.liveWritten} 条，移出 ${plan.removed.size} 条", "撤销") { undoRestore() },
+                    )
+                    written
+                }
+            })
+        }
+    }
+
+    /**
+     * 一次性撤销：整库换回恢复之前的快照。
+     * 快照用后即清，所以 Snackbar replay 让这条消息二次可见时，再点也不会重复回滚。
+     */
+    private fun undoRestore() = viewModelScope.launch {
+        val snapshot = preRestoreSnapshot ?: return@launch
+        preRestoreSnapshot = null
+        withContext(Dispatchers.IO) { repo.restoreSnapshot(snapshot) }
+        ReminderScheduler.runNow(getApplication())
+        _snackbar.emit(SnackbarMsg("已撤销，清单回到恢复之前"))
+    }
+
+    /** 恢复前的库内全量（含墓碑），仅供[undoRestore]一次性回滚 */
+    private var preRestoreSnapshot: List<Item>? = null
 }

@@ -6,7 +6,8 @@
 
 - [x] v2 品质升级（Task 1–13）全部完成 —— 2026-09-22 收尾：lint 0 error / 29 JVM 单测绿 / Room 迁移测试 emulator 通过 / 冷启动无崩溃
 - [x] M1 代码与 UI 在 emulator 全部跑通；M2 常识库模板上线（录入缩到两次点击）；UI 审计四批整改完成
-- [ ] **待用户**：7 项人工验收清单（见下表）+ MagicOS 真机杀后台验证
+- [x] 备份/恢复语义重做（2026-09-25 用户验收发现的缺陷）：恢复从"LWW 合并"改为"整库时间点还原"，带确认框、一次性撤销、墓碑随备份走
+- [ ] **待用户**：8 项人工验收清单（见下表，其中 3 项是恢复语义重做后新增/改写的）+ MagicOS 真机杀后台验证
 - [~] M3 同步 / M4 家庭共享 / M2 条码 —— **全部取消**（2026-09-25：没有服务器就不做多人；条码没有可用中文数据源）
 - 余下可做：M5 打磨 + 小遗留清扫（见「已知遗留」①②③④⑥）
 - 分支：`dev/ui`（已推 origin，尚未并回 `main`）。最后更新：2026-09-25
@@ -51,13 +52,20 @@
 - UI 审计与四批整改（2026-09-24，分支 `dev/ui` 已推送，详见 `docs/UI-AUDIT.md`）：三路并行取证（代码审查 / 模拟器量化 / GitHub 参考）后，第 1 批修正确性（逾期天数可见、今日「即将到期」与 hero 同源、表单首帧不报红、加载态），第 2 批修结构（详情浮层改根层覆盖、次级页去底栏、清单尾部语义分离、edge-to-edge），第 3 批做质感（tonal 分层去阴影、CountPill 取代红 Badge、排版 role、动效、搜索图标与清除、空态居中、功能 emoji→Material 图标、分隔符统一、长按去重、反馈走 Snackbar），第 4 批资产化（dateZh 统一四处日期、VM 私有状态+setter 让直写变成编译错误、EkCard/Pill/KeyValueRow 收敛四份重复卡片、chip 触控区扩至 48dp、Hero FlowRow 抗大字号）。单测 32 → 49，lint warning 16 → 13、0 error
   - 过程中三次自我纠错并留档：`dialog()` 路由因 Compose 1.12.1 无 `dimAmount` 造成双重压暗而否决；`isLoading` 极性写反导致空态被永久压制（单变量实验定位）；**负 padding 让设置/添加一点即崩**，被用户当场发现 —— 单测与 lint 结构上都抓不到「某屏一进去就崩」，故新增 `scripts/smoke-routes.sh` 全路由冒烟纳入门禁
 - 模拟器纪律与种子数据（2026-09-24）：Studio 里 app 打开后清单空空如也，追查为**开发工具混代**——CLI 用 `-no-snapshot-save` 启同一台 AVD（写盘在退出时被丢弃），Studio 又载入 9 月 22 日的 `default_boot` 快照把磁盘回滚，于是 `expiry-keeper.db`（只有 schema）与 `-wal`（唯一装着数据的帧）来自不同世代，SQLite 判定 WAL 无效直接重置，数据静默消失。**应用侧无 bug**：Room 未开 `fallbackToDestructiveMigration`，logcat 无异常，卸载重装才干净。取证后该快照已被今天的状态覆盖。三条纪律：① 不再用 `run-as sqlite3` 直改数据库（写 WAL 之外的世代是本次元凶之一，且只读打开也会顺带 checkpoint 掉 WAL，毁掉最后一个可恢复物证）；② 需要两台设备时另建 AVD，不与 Studio 抢 `Pixel_9`；③ 造数据走 `SeedDataTest`——在目标进程内经 `ItemRepository.save()`，派生到期日、change_log、events 全都真实生成，id 固定故重复执行是 upsert。7 条种子覆盖逾期/临期/续费今天/低库存/窗口外。注意 `connectedDebugAndroidTest` 跑完会回滚安装（连数据目录一起删），所以种完数据要用 `adb install -r` + `am instrument`，验证完再种一次即可
-- 已知遗留（M3/M4 取消后，这就是剩余待办池）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ 备份**格式**能表达墓碑（`toJson` 会写 `deletedAt`），但**导出文件里没有墓碑**——`exportBackup` 走 `repo.getAll()`，SQL 层就 `deletedAt IS NULL` 过滤掉了。语义上说得通（时间点还原不该重放删除），只是要知道：**导出的备份恢复后，被删的物品会回来**；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）——**这是唯一一处"设置项骗人"，M5 优先修**；⑦ 撤销：`SyncMerge` 平局取 incoming 对恢复路径正是正确语义，不需要改
+- 备份恢复语义重做（2026-09-25，用户验收报告的缺陷）：导出→改一条→导入**恢复不回来**。根因不是某个比较符，而是**职责错配**——恢复走的 `SyncMerge` 是 v2 T5 为 M3 同步写的 last-writer-wins 合并（文件注释还写着"M3 与备份共用"），T6 顺手拿去做恢复；而 LWW 恰恰是合并语义：改过的行 `updatedAt` 永远比备份新（`save()` 每次都刷成 now），于是备份被当作过期数据整条拒收。M3 已取消，该函数唯一调用方就是恢复，保留合并语义等于永久错。
+  - 改为**时间点还原**：`core/domain/Restore.kt` 的 `plan(local, incoming)` 出计划（写回 N 条 / 重放 K 条删除 / 移出 M 件），`ItemsViewModel` 拆成 `inspectBackup`（只读）+ `applyRestore`（确认后才写），设置页加确认 `AlertDialog` 把账目摊开，恢复后 Snackbar 一次性「撤销」可整库换回。空备份拒绝（否则等于清空清单）
+  - 用户数据行**永不物理删除**：备份里没有的那些只打墓碑，所以"移出"是可逆的；清空+写入放进 `ItemDao.replaceWith` 的单个事务，中途崩溃不会留下半份清单
+  - 导出改用 `getAllIncludingTombstones()`：备份现在保住"删除发生的时间"，恢复后墓碑行的 `deletedAt/updatedAt` 是当初真删那一刻而非恢复那一刻
+  - 删掉 `SyncMerge.kt` + `SyncMergeTest.kt`（8 条测试由 `RestoreTest` 7 条接替），并清掉随之失去调用方的 `upsertRaw` / `changeLogSince`
+  - 证据：`RestoreTest` 7/7 绿；新增 `RestoreDbTest` 在 in-memory Room 上真跑三件事（旧版本确实盖掉本地更新 / 备份后新增的物品只留墓碑不物理删 / 撤销能换回），2/2 绿；`RoomMigrationTest` 复绿；单测 55 全绿、lint 无新增告警
+- 已知遗留（M3/M4 取消后，这就是剩余待办池）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt（撤销恢复的快照用后即清，二次点击不会重复回滚）；④ `activeNotifications` 可加空防御；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）——**这是唯一一处"设置项骗人"，M5 优先修**。（⑤ 备份不携带墓碑、⑦ SyncMerge 平局语义 两项已由上面的恢复语义重做一并解决，编号保留不复用）
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
 | 项 | 来源 | 手测步骤 | 通过标准 |
 |---|---|---|---|
-| 备份/恢复 | T6 | 设置→导出到「下载」→改一条数据→导入该文件 | Toast 成功且数据按 LWW 回滚正确 |
-| 备份不携带删除 | 遗留 ⑤ | 删一条 → 导出 → 导入该文件 | 被删的那条**会回来**（导出不含墓碑，属已知语义，非 bug） |
+| 备份/恢复＝时间点还原 | 2026-09-25 重做 | 导出 → 改一条（改名+改到期日）→ 导入该文件 → 看确认框 → 替换全部 | 确认框先报账（写回 N 条 / 移出 M 件）；替换后那条**回到导出时的样子**（你报的缺陷）；提示条点「撤销」整库换回 |
+| 移出不是删库 | 同上 | 备份之后新加一件 → 导入旧备份 → 去清单看它消失 | 只在库里打墓碑、没被物理删除；再导一份**更新的**备份它就回来 |
+| 空备份拒绝 | 同上 | 手工把文件 items 改成 `[]` 再导入 | 提示"这份备份里没有任何条目，已取消"，清单**一条不动** |
 | 今日屏快速操作 | T8 | 造 3 条（明天到期/已过期/低库存）→点「今天不再提醒」/「稍后3天」/「续期」 | 分组与 DueRing 数字正确；处理/延后即时消失且重进不现；续期后到期日=today+shelfLife；暗色全页可读 |
 | 清单搜索排序分组 | T9 | 搜「牛奶」实时过滤/清空恢复；切 4 种排序；看分组计数 | 无到期日者沉底；分组计数与明细一致；~30 条无 jank |
 | 添加三步 & emoji | T10 | 「牛奶，开封 3 天」零键盘路径；自定义 🐠 保存；空名/双空规则校验；编辑 M1 旧数据 | ≤15 秒完成；emoji 在今日/清单/详情/通知标题均显示；非法输入按钮禁用且提示明确；旧数据不丢字段不崩 |

@@ -9,6 +9,9 @@ interface ChangeLogDao {
     @Insert
     suspend fun insert(entry: ChangeLogEntry)
 
+    @Insert
+    suspend fun insertAll(entries: List<ChangeLogEntry>)
+
     @Query("SELECT * FROM change_log WHERE seq > :since ORDER BY seq")
     suspend fun since(since: Long): List<ChangeLogEntry>
 

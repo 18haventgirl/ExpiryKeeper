@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -25,6 +26,22 @@ interface ItemDao {
 
     @Upsert
     suspend fun upsert(item: Item)
+
+    @Upsert
+    suspend fun upsertAll(items: List<Item>)
+
+    @Query("DELETE FROM items")
+    suspend fun deleteAll()
+
+    /**
+     * 备份恢复：整库换成备份那一刻的状态。清空 + 写入必须同事务，
+     * 中途崩溃不能留下"半份清单"（红线①：宁可整个操作失败也不能处于中间态）。
+     */
+    @Transaction
+    suspend fun replaceWith(items: List<Item>) {
+        deleteAll()
+        upsertAll(items)
+    }
 
     @Query("UPDATE items SET deletedAt = :now, updatedAt = :now WHERE id = :id")
     suspend fun softDelete(id: String, now: Long = System.currentTimeMillis())
