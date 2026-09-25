@@ -6,11 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -81,58 +86,95 @@ fun DetailSheet(
         val current = item
         val live = current.takeIf { it?.deletedAt == null }
 
-        // 浮层高度仍随内容自然伸缩（不写死百分比）。固定的是**页脚**：
-        // 编辑/删除在滚动区之外，永远贴在浮层下沿；内容超出可显示高度时只有内容滚。
-        Column(Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 4.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                when {
-                    !loaded -> Text("加载中…", style = MaterialTheme.typography.bodyMedium)
-                    current == null || current.deletedAt != null -> {
-                        // 控制裁决 7：物品已被他处删除 → 空态 + 关闭
-                        Text("该物品已不在清单中", style = MaterialTheme.typography.titleMedium)
-                        OutlinedButton(onClick = onDismiss) { Text("关闭") }
+        // 浮层高度写死（用户裁决 B）：不管哪个物品、内容几行，弹出来都一样高，
+        // 省掉"内容少的物品浮层矮一截"的参差感。页脚**浮在内容之上**而不是占一条，
+        // 所以内容会从它底下穿过 —— 页脚因此必须自带衬底，见 SheetFooter。
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(SheetHeightFraction),
+        ) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        // 底部留出页脚的高度，滑到底时最后一条记录不会被压在按钮下面
+                        .padding(top = 4.dp, bottom = FooterClearance),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    when {
+                        !loaded -> Text("加载中…", style = MaterialTheme.typography.bodyMedium)
+                        current == null || current.deletedAt != null -> {
+                            // 控制裁决 7：物品已被他处删除 → 空态 + 关闭
+                            Text("该物品已不在清单中", style = MaterialTheme.typography.titleMedium)
+                            OutlinedButton(onClick = onDismiss) { Text("关闭") }
+                        }
+                        else -> DetailContent(current, events, vm)
                     }
-                    else -> DetailContent(current, events, vm)
                 }
-            }
-            if (live != null) {
-                SheetFooter(live, vm, onEdit, onDismiss)
+                if (live != null) {
+                    SheetFooter(
+                        live, vm, onEdit, onDismiss,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
             }
         }
     }
 }
 
-/** 钉在浮层底部的操作区：编辑 / 删除。放在滚动区之外，位置与内容条数无关。 */
+private val SheetHeightFraction = 0.62f
+private val FooterClearance = 96.dp
+private val ScrimHeight = 20.dp
+
+/**
+ * 浮在内容之上的页脚：编辑 / 删除。
+ *
+ * 位置永远在浮层下沿，不随内容滚动。因为内容会从它底下划过，这里必须铺一层
+ * 与浮层同色的衬底，并在其上接一段渐隐——否则长备注/记录文字会在按钮下方
+ * 若隐若现（M3 的 bottom-bar 衬底同理）。衬底取 surfaceContainerLow，
+ * 与 ModalBottomSheet 默认容器色一致，深浅两套主题都实测过像素对齐。
+ */
 @Composable
-private fun SheetFooter(item: Item, vm: ItemsViewModel, onEdit: (String) -> Unit, onDismiss: () -> Unit) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 28.dp),
-    ) {
-        OutlinedButton(onClick = { onEdit(item.id) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Filled.Edit, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("编辑")
+private fun SheetFooter(
+    item: Item,
+    vm: ItemsViewModel,
+    onEdit: (String) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val base = MaterialTheme.colorScheme.surfaceContainerLow
+    Column(modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(ScrimHeight)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, base))),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(base)
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp, bottom = 20.dp),
+        ) {
+            OutlinedButton(onClick = { onEdit(item.id) }, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.Edit, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("编辑")
+            }
+            FilledTonalButton(
+                onClick = { vm.deleteWithUndo(item.id); onDismiss() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            ) { Text("删除") }
         }
-        FilledTonalButton(
-            onClick = { vm.deleteWithUndo(item.id); onDismiss() },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            ),
-        ) { Text("删除") }
     }
 }
 
