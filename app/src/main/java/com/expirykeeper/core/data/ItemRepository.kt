@@ -136,7 +136,4 @@ class ItemRepository(
         )
         return rows.size
     }
-
-    /** 撤销恢复：把恢复前那份全量原样换回去（同样单事务，不追加墓碑，时间戳保持快照原值） */
-    suspend fun restoreSnapshot(rows: List<Item>) = itemDao.replaceWith(rows)
 }

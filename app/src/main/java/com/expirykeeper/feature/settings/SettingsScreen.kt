@@ -250,7 +250,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
         EkCard("数据") {
             Text(
                 "导出为 JSON 文件（含已删除记录）。导入 = 时间点还原：清单会变成导出那一刻的样子，" +
-                    "备份之后新增的物品会被移出。恢复前会先让你确认，并且可以当场撤销。",
+                    "备份之后新增的物品会被移出（不物理删除）。动手前会先把账目报给你确认。",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -289,7 +289,7 @@ fun SettingsScreen(vm: ItemsViewModel, onBack: () -> Unit) {
                                         .orEmpty(),
                             )
                         }
-                        Text("移出只是暂时收起，不是真删；恢复后当下也能在提示条上点「撤销」全部换回来。")
+                        Text("移出只是暂时收起，不是真删：物品仍留在库里，之后导一份更新的备份就能带回来。")
                     }
                 },
                 confirmButton = {

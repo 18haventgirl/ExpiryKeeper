@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -53,8 +54,10 @@ import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 
 /**
- * 详情浮层（Task 11）：注册在 `detail/{id}` 路由内、以 ModalBottomSheet 覆盖来路屏。
+ * 详情浮层（Task 11）：挂在 EkApp 根层之上（不是路由，避免来路屏被清空）。
  * 数据源 repo.observeById 实时流；快速操作复用 VM；删除走 deleteWithUndo（Snackbar 可撤销）。
+ * 结构：滚动区（头部/键值/快速操作/最近记录）+ 钉底页脚（编辑/删除）——
+ * 页脚在滚动区之外，所以它的位置与内容条数无关。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +67,7 @@ fun DetailSheet(
     onEdit: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         var item by remember(itemId) { mutableStateOf<Item?>(null) }
         var loaded by remember(itemId) { mutableStateOf(false) }
         var events by remember(itemId) { mutableStateOf<List<ItemEvent>>(emptyList()) }
@@ -76,36 +79,71 @@ fun DetailSheet(
         }
         LaunchedEffect(itemId) { events = vm.recentEventsFor(itemId) }
 
+        val current = item
+        val live = current.takeIf { it?.deletedAt == null }
+
+        // 浮层高度固定为可用高度的 62%：不随内容条数涨缩，所以页脚（编辑/删除）落在屏幕上
+        // 的位置永远一样。代价是内容少的物品下方会留白——这是"位置稳定"换来的取舍。
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxHeight(0.62f),
         ) {
-            val current = item
-            when {
-                !loaded -> Text("加载中…", style = MaterialTheme.typography.bodyMedium)
-                current == null || current.deletedAt != null -> {
-                    // 控制裁决 7：物品已被他处删除 → 空态 + 关闭
-                    Text("该物品已不在清单中", style = MaterialTheme.typography.titleMedium)
-                    OutlinedButton(onClick = onDismiss) { Text("关闭") }
+            // 只有这一段滚
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 4.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                when {
+                    !loaded -> Text("加载中…", style = MaterialTheme.typography.bodyMedium)
+                    current == null || current.deletedAt != null -> {
+                        // 控制裁决 7：物品已被他处删除 → 空态 + 关闭
+                        Text("该物品已不在清单中", style = MaterialTheme.typography.titleMedium)
+                        OutlinedButton(onClick = onDismiss) { Text("关闭") }
+                    }
+                    else -> DetailContent(current, events, vm)
                 }
-                else -> DetailContent(current, events, vm, onEdit, onDismiss)
+            }
+            if (live != null) {
+                SheetFooter(live, vm, onEdit, onDismiss)
             }
         }
     }
 }
 
+/** 钉在浮层底部的操作区：编辑 / 删除。放在滚动区之外，位置与内容条数无关。 */
 @Composable
-private fun DetailContent(
-    item: Item,
-    events: List<ItemEvent>,
-    vm: ItemsViewModel,
-    onEdit: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
+private fun SheetFooter(item: Item, vm: ItemsViewModel, onEdit: (String) -> Unit, onDismiss: () -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 28.dp),
+    ) {
+        OutlinedButton(onClick = { onEdit(item.id) }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Filled.Edit, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("编辑")
+        }
+        FilledTonalButton(
+            onClick = { vm.deleteWithUndo(item.id); onDismiss() },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ),
+        ) { Text("删除") }
+    }
+}
+
+@Composable
+private fun DetailContent(item: Item, events: List<ItemEvent>, vm: ItemsViewModel) {
     val cat = Categories.default(item.categoryId)
     val today = LocalDate.now()
     val reminder = ReminderEngine.computeOne(item, today)
@@ -177,23 +215,6 @@ private fun DetailContent(
                 Text(eventKindLabel(e.kind), style = MaterialTheme.typography.bodySmall)
             }
         }
-    }
-
-    // 底部：编辑 + 删除（唯一删除路径，撤销走 Snackbar）
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-        OutlinedButton(onClick = { onEdit(item.id) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Filled.Edit, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("编辑")
-        }
-        FilledTonalButton(
-            onClick = { vm.deleteWithUndo(item.id); onDismiss() },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            ),
-        ) { Text("删除") }
     }
 }
 

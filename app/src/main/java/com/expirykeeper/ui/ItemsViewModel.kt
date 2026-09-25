@@ -206,35 +206,22 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 恢复第二步：整库替换。动手前把当前全量留在内存，换错了有一次「撤销」 */
+    /**
+     * 恢复第二步：整库替换。
+     *
+     * 这里**故意不做"撤销条"**（2026-09-25 用户裁决，此前我加过一次又被要求拆掉）：
+     * 唯一的保护就是动手前那次确认——它必须把"写回几条、移出几条"报清楚。
+     * 被移出的物品只打墓碑不物理删，所以真后悔了还能靠更早的备份找回。
+     */
     fun applyRestore(plan: RestorePlan, onDone: (Result<Int>) -> Unit) {
         viewModelScope.launch {
             onDone(runCatching {
                 withContext(Dispatchers.IO) {
-                    preRestoreSnapshot = repo.getAllIncludingTombstones()
                     val written = repo.restore(plan)
                     ReminderScheduler.runNow(getApplication())
-                    _snackbar.emit(
-                        SnackbarMsg("已恢复：写回 ${plan.liveWritten} 条，移出 ${plan.removed.size} 条", "撤销") { undoRestore() },
-                    )
                     written
                 }
             })
         }
     }
-
-    /**
-     * 一次性撤销：整库换回恢复之前的快照。
-     * 快照用后即清，所以 Snackbar replay 让这条消息二次可见时，再点也不会重复回滚。
-     */
-    private fun undoRestore() = viewModelScope.launch {
-        val snapshot = preRestoreSnapshot ?: return@launch
-        preRestoreSnapshot = null
-        withContext(Dispatchers.IO) { repo.restoreSnapshot(snapshot) }
-        ReminderScheduler.runNow(getApplication())
-        _snackbar.emit(SnackbarMsg("已撤销，清单回到恢复之前"))
-    }
-
-    /** 恢复前的库内全量（含墓碑），仅供[undoRestore]一次性回滚 */
-    private var preRestoreSnapshot: List<Item>? = null
 }

@@ -12,17 +12,18 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 恢复 = 整库替换，这是全 App 唯一会动到"别人的行"的操作，所以它的三条不变量必须真跑一遍
+ * 恢复 = 整库替换，这是全 App 唯一会动到"别人的行"的操作，所以它的两条不变量必须真跑一遍
  * Room 才算证明（JVM 单测只能证明计划算对了，证明不了事务与落库结果）：
  * ① 备份里的旧版本确实盖掉本地更新（用户报的那个 bug）；
- * ② 备份之后新增的物品只是被打墓碑，行还在库里，永不物理删除；
- * ③ 撤销（restoreSnapshot）能把整库换回恢复之前。
+ * ② 备份之后新增的物品只是被打墓碑，行还在库里，永不物理删除。
+ *
+ * 曾经还有第三条"撤销能换回"，2026-09-25 用户裁决取消撤销条、只保留导入前的二次确认，
+ * 那条测试随之删除——保护伞变成确认框，见 SettingsScreen 的账目文案。
  */
 @RunWith(AndroidJUnit4::class)
 class RestoreDbTest {
@@ -50,7 +51,6 @@ class RestoreDbTest {
         // 正是用户验收时那个"改过的行时间戳永远赢过备份"的形状。
         repo.save(item("yogurt", "草莓", 200))
         repo.save(item("egg", "鸡蛋", 300))
-        val before = repo.getAllIncludingTombstones()
 
         val file = listOf(item("yogurt", "原味", 100))
         val plan = Restore.plan(repo.getAllIncludingTombstones(), file)
@@ -63,15 +63,11 @@ class RestoreDbTest {
         assertEquals("原味", live[0].name)
         assertEquals(100L, live[0].updatedAt)
 
-        // ② 备份之后加的鸡蛋被移出清单，但行还在（可再导回来，不是真删）
+        // ② 备份之后加的鸡蛋被移出清单，但行还在库里（打墓碑，不是物理删除）
         assertEquals(0, repo.getAll().count { it.id == "egg" })
         val eggRow = repo.getAllIncludingTombstones().first { it.id == "egg" }
         assertNotNull("鸡蛋必须留下墓碑行", eggRow.deletedAt)
-
-        // ③ 撤销：整库换回恢复之前
-        repo.restoreSnapshot(before)
-        assertEquals(setOf("草莓", "鸡蛋"), repo.getAll().map { it.name }.toSet())
-        assertNull(repo.getAll().first { it.id == "egg" }.deletedAt)
+        assertEquals(2, repo.getAllIncludingTombstones().size)
     }
 
     /** 备份里自带的墓碑要能重放：恢复后那件物品仍然是删除状态，且保住当初的删除时间 */
