@@ -5,8 +5,11 @@
 ## 当前状态
 
 - [x] v2 品质升级（Task 1–13）全部完成 —— 2026-09-22 收尾：lint 0 error / 29 JVM 单测绿 / Room 迁移测试 emulator 通过 / 冷启动无崩溃
-- [进行中] M1 单机可用 —— 代码与 v2 均在 emulator 跑通；MagicOS 真机杀后台验证仍待用户方便时进行
-- 最后更新：2026-09-22
+- [x] M1 代码与 UI 在 emulator 全部跑通；M2 常识库模板上线（录入缩到两次点击）；UI 审计四批整改完成
+- [ ] **待用户**：7 项人工验收清单（见下表）+ MagicOS 真机杀后台验证
+- [~] M3 同步 / M4 家庭共享 / M2 条码 —— **全部取消**（2026-09-25：没有服务器就不做多人；条码没有可用中文数据源）
+- 余下可做：M5 打磨 + 小遗留清扫（见「已知遗留」①②③④⑥）
+- 分支：`dev/ui`（已推 origin，尚未并回 `main`）。最后更新：2026-09-25
 
 ## 环境与构建备忘
 
@@ -48,12 +51,13 @@
 - UI 审计与四批整改（2026-09-24，分支 `dev/ui` 已推送，详见 `docs/UI-AUDIT.md`）：三路并行取证（代码审查 / 模拟器量化 / GitHub 参考）后，第 1 批修正确性（逾期天数可见、今日「即将到期」与 hero 同源、表单首帧不报红、加载态），第 2 批修结构（详情浮层改根层覆盖、次级页去底栏、清单尾部语义分离、edge-to-edge），第 3 批做质感（tonal 分层去阴影、CountPill 取代红 Badge、排版 role、动效、搜索图标与清除、空态居中、功能 emoji→Material 图标、分隔符统一、长按去重、反馈走 Snackbar），第 4 批资产化（dateZh 统一四处日期、VM 私有状态+setter 让直写变成编译错误、EkCard/Pill/KeyValueRow 收敛四份重复卡片、chip 触控区扩至 48dp、Hero FlowRow 抗大字号）。单测 32 → 49，lint warning 16 → 13、0 error
   - 过程中三次自我纠错并留档：`dialog()` 路由因 Compose 1.12.1 无 `dimAmount` 造成双重压暗而否决；`isLoading` 极性写反导致空态被永久压制（单变量实验定位）；**负 padding 让设置/添加一点即崩**，被用户当场发现 —— 单测与 lint 结构上都抓不到「某屏一进去就崩」，故新增 `scripts/smoke-routes.sh` 全路由冒烟纳入门禁
 - 模拟器纪律与种子数据（2026-09-24）：Studio 里 app 打开后清单空空如也，追查为**开发工具混代**——CLI 用 `-no-snapshot-save` 启同一台 AVD（写盘在退出时被丢弃），Studio 又载入 9 月 22 日的 `default_boot` 快照把磁盘回滚，于是 `expiry-keeper.db`（只有 schema）与 `-wal`（唯一装着数据的帧）来自不同世代，SQLite 判定 WAL 无效直接重置，数据静默消失。**应用侧无 bug**：Room 未开 `fallbackToDestructiveMigration`，logcat 无异常，卸载重装才干净。取证后该快照已被今天的状态覆盖。三条纪律：① 不再用 `run-as sqlite3` 直改数据库（写 WAL 之外的世代是本次元凶之一，且只读打开也会顺带 checkpoint 掉 WAL，毁掉最后一个可恢复物证）；② 需要两台设备时另建 AVD，不与 Studio 抢 `Pixel_9`；③ 造数据走 `SeedDataTest`——在目标进程内经 `ItemRepository.save()`，派生到期日、change_log、events 全都真实生成，id 固定故重复执行是 upsert。7 条种子覆盖逾期/临期/续费今天/低库存/窗口外。注意 `connectedDebugAndroidTest` 跑完会回滚安装（连数据目录一起删），所以种完数据要用 `adb install -r` + `am instrument`，验证完再种一次即可
-- 已知遗留（M3 起手清单）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待 M2「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ **已订正并拆分**：备份**格式**自 v2 起就携带 `deletedAt` 与 `lastModifiedBy`，恢复不会复活删除；但导出走 `repo.getAll()`，而它在 SQL 层就 `deletedAt IS NULL` 过滤，所以**备份文件里根本没有墓碑**——手动恢复语义上没问题（时间点还原），M3 同步若照抄这条路径则删除永远传不出去，必须改用 `getAllIncludingTombstones()`；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）；⑦ `SyncMerge` 平局取 incoming（`inc.updatedAt >= cur.updatedAt`，`SyncMerge.kt:14`），同毫秒并发写时收敛顺序依赖到达次序，M3 需换成 `(updatedAt, deviceId)` 全序——**已在 M3 规格 §6.2 展开**，注意恢复路径的 `PREFER_INCOMING` 语义要保住（`tiePrefersIncoming` 是它的护栏）。M2 条码、M3 同步仍为未来里程碑
+- 已知遗留（M3/M4 取消后，这就是剩余待办池）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt；④ `activeNotifications` 可加空防御；⑤ 备份**格式**能表达墓碑（`toJson` 会写 `deletedAt`），但**导出文件里没有墓碑**——`exportBackup` 走 `repo.getAll()`，SQL 层就 `deletedAt IS NULL` 过滤掉了。语义上说得通（时间点还原不该重放删除），只是要知道：**导出的备份恢复后，被删的物品会回来**；⑥「每日提醒时间」设置项实际未接线（ReminderScheduler 固定 9 点）——**这是唯一一处"设置项骗人"，M5 优先修**；⑦ 撤销：`SyncMerge` 平局取 incoming 对恢复路径正是正确语义，不需要改
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
 | 项 | 来源 | 手测步骤 | 通过标准 |
 |---|---|---|---|
 | 备份/恢复 | T6 | 设置→导出到「下载」→改一条数据→导入该文件 | Toast 成功且数据按 LWW 回滚正确 |
+| 备份不携带删除 | 遗留 ⑤ | 删一条 → 导出 → 导入该文件 | 被删的那条**会回来**（导出不含墓碑，属已知语义，非 bug） |
 | 今日屏快速操作 | T8 | 造 3 条（明天到期/已过期/低库存）→点「今天不再提醒」/「稍后3天」/「续期」 | 分组与 DueRing 数字正确；处理/延后即时消失且重进不现；续期后到期日=today+shelfLife；暗色全页可读 |
 | 清单搜索排序分组 | T9 | 搜「牛奶」实时过滤/清空恢复；切 4 种排序；看分组计数 | 无到期日者沉底；分组计数与明细一致；~30 条无 jank |
 | 添加三步 & emoji | T10 | 「牛奶，开封 3 天」零键盘路径；自定义 🐠 保存；空名/双空规则校验；编辑 M1 旧数据 | ≤15 秒完成；emoji 在今日/清单/详情/通知标题均显示；非法输入按钮禁用且提示明确；旧数据不丢字段不崩 |
@@ -67,19 +71,15 @@
 - [ ] ~~条码扫描（MLKit）+ 可选在线查询~~ —— **2026-09-24 用户拍板：彻底不做**。MLKit 能解出码但解不出「这是什么商品」，中文条码→品名没有稳定免费 API（spec §8 已预见「失败则降级纯手动填名」），而「条码（选填）」字段现在就能手填；在拿到可用数据源之前，扫描只提供一串数字，价值不抵引入 CameraX+MLKit+相机权限的成本。M2 就此收口，直接进 M3
 - 验收：6 品类各录 3 件真实物品，全家桶提醒正确 —— 常识库上线后录入路径已缩到「选品类 → 点常见 → 保存」两次点击
 
-### M3 同步协议
-- 设计规格：`docs/superpowers/specs/2026-09-24-m3-sync-design.md`（**待用户评审**，评审通过后才写实现计划）
-- [ ] change_log 增量导出 / LWW 合并 / 墓碑清理 → **规格改判**：不做增量、不做游标、不清理墓碑，改为每设备全量快照 + 总序 LWW（理由见规格 §3 与 §7.3），`change_log` 继续只写不读
-- [ ] 总序 LWW 合并（`(updatedAt, lastModifiedBy)` 字典序）+ 收敛性/幂等性测试 + 被丢版本入 `sync_conflicts` 表（schema v2→v3，只增表不动 items）
-- [ ] SyncDriver 接口 + LocalFolderDriver（双目录仿真两设备）
-- [ ] 冲突仿真测试（并发编辑、删除复活、离线回归）
-- 验收：两台设备（仿真 + 双 AVD）数据最终一致，无丢改
+### M3 同步协议 —— **已取消（2026-09-25 用户决定：没有服务器，不做多人功能）**
+- 设计规格 `docs/superpowers/specs/2026-09-24-m3-sync-design.md` 已写完并自审，随即**作废**（文件保留作决策记录，不实现）
+- 事实备注（供将来回看）：规格选的拓扑 A 靠**网盘/NAS 客户端同步一个共享目录**，不需要自建服务器；但用户决定不做，此项连同 M4 一并撤下
+- 因此 `SyncMerge` 的平局语义（遗留 ⑦）**不再是待修项**：唯一的调用方是手动备份恢复，`PREFER_INCOMING`（信手上这份）正是恢复该有的语义
+- 不变：`change_log` 继续只写不读、`SyncMerge` 只服务恢复路径、备份导出不带墓碑（`getAll()` 过滤）——都是正确行为
 
-### M4 家庭共享
-- [ ] WebDavDriver（坚果云 / NAS）
-- [ ] 二维码配对导入同步配置
-- [ ] 成员标识（deviceId → 昵称）、全家通知
-- 验收：家人手机扫码入伙，妈妈添加的物品我手机能收到提醒
+### M4 家庭共享 —— **随 M3 取消**（依赖同步通道，同步不做则无从谈起）
+- 原计划：WebDavDriver / 二维码配对 / 成员标识。全部撤下
+- 单机版仍然成立的"全家受益"路径：一台手机管全家物品，或者各自装 App 各自用
 
 ### M5 打磨
 - [ ] 物品照片、月度统计（丢弃成本）、桌面小组件/图标角标
@@ -88,6 +88,7 @@
 
 - 2026-09-20 放弃 token 统计方向：开源过于成熟（codeburn/tokscale/aiusage 等，全 MIT）。调研成果保留在 `reference/`（4 个克隆仓库），与本项目无关，可删。
 - 2026-09-22 立项"到期管家"：纯自用、家庭共享、本地优先零服务器、同步走 SyncDriver 接口（LocalFolder → WebDAV）、提醒全本地生成。
+- 2026-09-25 **砍掉 M3 同步与 M4 家庭共享**（用户：没有服务器就不做多人功能）。项目定位从"家庭共享"收敛为**单机强工具**：本地优先这条从一开始就没破过，现在连"跨设备"这条也没了。规格 `2026-09-24-m3-sync-design.md` 作废留档。连带结论：`SyncMerge` 平局语义不用改、备份不带墓碑是可接受语义、为 M3 新建第二台 AVD 的需求消失。
 
 ## 风险雷达
 
@@ -95,5 +96,6 @@
 |---|---|
 | 录入摩擦导致弃用 | M1 先用起来验证，模板把添加压到 15 秒内 |
 | MagicOS 杀后台导致通知不准时 | M1 真机验证；备选：充电时补扫 + 打开 App 时补发 |
-| 中文条码库 API 不可用 | M2 前验证，降级纯手动 |
+| 中文条码库 API 不可用 | 已失效——条码功能 2026-09-24 彻底不做 |
+| 没有服务器，多人共享无法落地 | 已失效——M3/M4 于 2026-09-25 取消，项目定位为单机工具 |
 | 目录名仍叫 MyTokens | 待用户确认是否改目录/工程名 |
