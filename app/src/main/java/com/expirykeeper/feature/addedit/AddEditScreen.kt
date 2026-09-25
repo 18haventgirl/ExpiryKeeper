@@ -201,29 +201,18 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             quantity = quantity.toDoubleOrNull(),
             unit = unit.trim().ifBlank { null },
             lowStockThreshold = threshold.toDoubleOrNull(),
+            nextDueAtEpochDay = nextDueDate?.toEpochDay(),
+            recurrenceDays = recurrence, // I-4：无静默回退；invalid/未选时按钮已被 ruleErr 禁用
         )
-        // I-3b：按目标 reminderKind 重建，显式清空其他 kind 的专属字段，
-        // 使"编辑换类"落库形态与新建同 kind 一致（新建默认全 null），不携带原 kind 脏值。
-        // quantity/unit/lowStockThreshold 恒由 CONSUMABLE 表单文本派生（非该类时为空→null），无需再清。
-        return when (cat.reminderKind) {
-            // 互斥清理走 ExpiryForm：换模式即清空另一侧字段，到期日派生留给 repo.save
-            ReminderKind.EXPIRY -> {
-                val expiry = when (expiryMode) {
-                    ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
-                    ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
-                }
-                expiry.copy(nextDueAtEpochDay = null, recurrenceDays = null)
+        // EXPIRY 还分"填日期 / 开封+保质期"两种子形态，先定型
+        val shaped = if (cat.reminderKind == ReminderKind.EXPIRY) {
+            when (expiryMode) {
+                ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
+                ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
             }
-            ReminderKind.RECURRING -> item.copy(
-                nextDueAtEpochDay = nextDueDate?.toEpochDay(),
-                recurrenceDays = recurrence, // I-4：无静默回退；invalid/未选时按钮已被 ruleErr 禁用
-                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
-            )
-            ReminderKind.CONSUMABLE -> item.copy(
-                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
-                nextDueAtEpochDay = null, recurrenceDays = null,
-            )
-        }
+        } else item
+        // 再统一清掉别的 kind 的专属字段（修 ①：编辑换类时表单里留着上一类的值）
+        return ExpiryForm.scrubForeignFields(shaped)
     }
 
     Column(

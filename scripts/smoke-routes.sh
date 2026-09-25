@@ -33,6 +33,11 @@ echo "全路由冒烟 $SERIAL"
 alive "今日（冷启动）"
 
 tap 976 309; sleep 3; alive "设置页（今日 → 设置入口）"
+# 每日提醒卡（TimePicker 是 experimental M3 API，弹不出来/一弹就崩只有走一遍才知道）
+"$ADB" -s "$SERIAL" shell input swipe 540 1900 540 700 400; sleep 1
+"$ADB" -s "$SERIAL" shell input swipe 540 1900 540 700 400; sleep 1
+tap 540 1290; sleep 3; alive "TimePicker 弹窗（每日提醒 → 检查时间）"
+back; sleep 2
 back; sleep 2
 
 tap 814 2298; sleep 2; alive "清单页（切 tab）"

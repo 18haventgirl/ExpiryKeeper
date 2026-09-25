@@ -99,15 +99,6 @@ class ItemRepository(
     suspend fun rollCount30d(): Int =
         eventDao.rollCountSince(java.time.LocalDate.now().minusDays(30).toEpochDay())
 
-    suspend fun consumeOne(id: String) {
-        val item = itemDao.getById(id) ?: return
-        val now = System.currentTimeMillis()
-        val qty = (item.quantity ?: 1.0) - 1.0
-        // 单次操作只读一次时间：数量行的 updatedAt 与 change_log 水位共用同一 now
-        itemDao.setQuantity(id, qty.coerceAtLeast(0.0), now)
-        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
-    }
-
     /**
      * 恢复预览：拿本地全量（**含墓碑**）与文件比对，算出"写回什么、移出什么"的账目，
      * 供确认框在动手之前把数字报给用户。本地快照必须含墓碑，否则"备份里已删、本地还在"

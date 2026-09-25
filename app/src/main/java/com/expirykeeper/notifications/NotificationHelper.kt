@@ -97,7 +97,9 @@ object NotificationHelper {
         // notifIdFor 是纯哈希无法反查全集，故以系统活动通知列表为准；cancelAll 会误伤前台/其它
         // 通知，绝不使用。
         val keepIds = reminders.map { it.notificationId }.toHashSet().apply { add(SUMMARY_ID) }
-        manager.activeNotifications.forEach { act ->
+        // activeNotifications 在文档上是"永不返回 null"，但部分国产 ROM 会返回 null；
+        // 这里在 WorkManager 后台线程跑，抛 NPE 等于整轮提醒静默失败，兜一个空数组。
+        (manager.activeNotifications ?: emptyArray()).forEach { act ->
             if (act.notification?.channelId == CHANNEL_ID && act.id !in keepIds) manager.cancel(act.id)
         }
         val grouped = reminders.size > 1 // 单条不挂组机制，避免摘要闪烁

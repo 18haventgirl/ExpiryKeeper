@@ -54,6 +54,29 @@ object ExpiryForm {
     fun applyOpenedMode(item: Item, openedAtEpochDay: Long?, shelfLifeDays: Int?): Item =
         item.copy(expireAtEpochDay = null, openedAtEpochDay = openedAtEpochDay, shelfLifeDays = shelfLifeDays)
 
+    /**
+     * 落库前的最后一道：物品只保留自己 reminderKind 的字段。
+     *
+     * 存在的理由是"编辑换类"这条路——表单文本框里留着上一类的值（CONSUMABLE 的
+     * quantity="2"），换成药品保存后 buildItem 会把它一起写回库，物品已经不是那个语义了。
+     * 用 exhaustive when：将来加第四种 kind，编译器会逼着在这里表态，
+     * 而不是像以前那样靠注释声明"这里不需要清"（那条注释本身就是错的）。
+     */
+    fun scrubForeignFields(item: Item): Item = when (item.reminderKind) {
+        ReminderKind.EXPIRY -> item.copy(
+            quantity = null, unit = null, lowStockThreshold = null,
+            nextDueAtEpochDay = null, recurrenceDays = null,
+        )
+        ReminderKind.CONSUMABLE -> item.copy(
+            expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
+            nextDueAtEpochDay = null, recurrenceDays = null,
+        )
+        ReminderKind.RECURRING -> item.copy(
+            expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
+            quantity = null, unit = null, lowStockThreshold = null,
+        )
+    }
+
     /** 自定义天数文本 → 合法整数或 null（非数字/越界一律 null，由 UI 显示行内错误） */
     fun parseDays(text: String): Int? = text.trim().toIntOrNull()?.takeIf { it in ShelfLifeRange }
 

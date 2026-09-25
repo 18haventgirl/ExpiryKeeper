@@ -10,7 +10,7 @@
 - [x] 订阅过期不再静默（新增「续费逾期」状态，与 EXPIRY 逾期同构）；「每日提醒时间」真正接线（新增设置卡，兜底路径过时刻闸）
 - [ ] **待用户**：10 项人工验收清单（见下表；恢复 3 项、订阅逾期 1 项、提醒时间 1 项为近期新增）+ MagicOS 真机杀后台验证
 - [~] M3 同步 / M4 家庭共享 / M2 条码 —— **全部取消**（2026-09-25：没有服务器就不做多人；条码没有可用中文数据源）
-- 余下可做：M5 打磨 + 小遗留清扫（见「已知遗留」①②③④）
+- 余下可做：只剩 M5 打磨（小组件 / 月度统计 / 物品照片）——v2 遗留池已清零，没有欠账
 - 分支：`dev/ui`（已推 origin，尚未并回 `main`）。最后更新：2026-09-25
 
 ## 环境与构建备忘
@@ -71,7 +71,14 @@
   - **顺带修掉一个会让这个设置变成假话的问题**：WorkManager 每 24h 的兜底 `DailyScanWorker` 也会发通知，而它自己的调度时刻与用户设定的时刻无关——不拦就是"设了 20:30 结果凌晨 3 点弹"。现在 `NotificationHelper.postDailyReminders` 成为统一出口，`respectSchedule` 参数区分两条路：兜底过闸，精确闹钟本身与用户操作后的 runNow 不过闸（后者要当场刷新，`notifyAll` 顺带清扫陈旧子通知，跳过它反而让旧通知滞留）
   - 设置页新增「每日提醒」卡：显示当前时刻 + **下次提醒：9月26日 09:00**（只写 HH:mm 用户无法判断是今天还是明天）+ 未允许精确闹钟时明示"可能延到最长 24 小时兜底"。TimePicker 仍是 `@ExperimentalMaterial3Api`，所以卡片单独成 composable 把 opt-in 关在小作用域里，没有给整个设置页加注解
   - 证据：单测 61 → **71 全绿**（`ReminderTimingTest` 10 条：未到点/已过点/压线/一分钟前/月末年末进位/凌晨档/非法值钳位 + 兜底闸三条）；**真机端到端**：设成 11:30 → `dumpsys alarm` 显示 `origWhen=2026-09-25 11:30:00` → 等到 11:32 确认它真的响了（通知栏 `「酸奶」已过期 3 天…` + `「视频会员」扣费日已过 1 天…`）→ 闹钟自动续排到 `2026-09-26T11:30`（设备 GMT）→ 改回 09:00 后续排 `2026-09-26 09:00` ✓ 这条链从 UI 到 prefs 到 AlarmManager 到通知到自我续排，每一环都有观测证据
-- 已知遗留（M3/M4 取消后，这就是剩余待办池）：① AddEdit 由 CONSUMABLE 改类时 quantity/unit/lowStockThreshold 残留（引擎按 reminderKind 分发，暂无行为影响）；② `ItemRepository.consumeOne` 无生产调用方（保留待「吃完」快捷操作或后续删除）；③ Snackbar replay=1 撤销按钮二次点击会再写一次 updatedAt（撤销恢复的快照用后即清，二次点击不会重复回滚）；④ `activeNotifications` 可加空防御。（⑤ 备份不携带墓碑、⑦ SyncMerge 平局语义 两项已由上面的恢复语义重做一并解决；**⑥「每日提醒时间」也已在上面解决**——它原先的描述本身就是错的，设置页里从来没有那一行，是 `ReminderScheduler` 写死 9 点。编号保留不复用）
+- v2 四个小遗留清扫完毕（2026-09-25，#51）
+  - **① 换类残留字段**：`AddEditScreen.buildItem` 里那句注释「quantity/unit/lowStockThreshold 恒由 CONSUMABLE 表单文本派生（非该类时为空→null），无需再清」是**错的**——编辑一件耗材时文本框里留着 `0.4`，把品类换成药品后照样写回库。改为 `ExpiryForm.scrubForeignFields(item)`：按 `reminderKind` 的 exhaustive `when` 清掉别类专属字段，将来加第四种 kind 编译器会逼着表态，不再靠注释声明"这里不用清"。顺带把 buildItem 原来那三段重复的 copy 收敛成"先定 EXPIRY 子形态 → 统一 scrub"
+  - **② 死代码**：`ItemRepository.consumeOne` 无调用方 → 删；连带删掉因此失去唯一调用方的 `ItemDao.setQuantity`（`changeLogDao.insert` 仍被 5 处使用，保留）
+  - **③ 撤销二次写入**：`deleteWithUndo` 的 snackbar 闭包加一次性守卫（`replay=1` 会让消息在配置变更后再次可见，第二次点会白白再刷一次 `updatedAt`）；恢复路径的快照守卫同理
+  - **④ `activeNotifications` 空防御**：文档上"永不返回 null"，国产 ROM 会给 null，而这行跑在 WorkManager 后台线程，抛 NPE 等于整轮提醒静默失败 → 兜空数组
+  - 顺手：`AppPrefs` 四个 setter 改用 core-ktx 的 `edit { }`（lint `UseKtx` 从 1 条涨到 4 条是我自己新写出来的，收掉后该文件零告警）
+  - 证据：单测 71 → **75 全绿**（`ExpiryFormTest` 新增 4 条：EXPIRY/CONSUMABLE/RECURRING 各留自己清别类 + scrub 幂等）；lint 15 warning 全部为既有类别（依赖版本、Composable 命名、monochrome 图标等），无一条落在我改过的代码上；**真机**：洗衣液（耗材，数量 0.4 瓶 / 低库存线 1）→ 编辑改品类为药品保健 → 保存 → 详情里两行库存字段消失、变成到期日/剩余；随后用备份还原，两行又回来 ✓。③ 的二次写入只在数据层可见、UI 上看不出来，未做真机验证，靠代码守卫 + 注释说明
+- 已知遗留：**清零**。v2 收尾时列的 ①~⑦ 到 2026-09-25 全部处理完——① 换类残留字段、② `consumeOne` 死代码（连带 `ItemDao.setQuantity`）、③ 撤销二次写入、④ `activeNotifications` 空防御由 #51 清扫；⑤ 备份不携带墓碑、⑦ SyncMerge 平局语义由恢复语义重做一并解决；⑥「每日提醒时间」原先的描述本身就是错的（设置页里从来没有那一行，是 `ReminderScheduler` 写死 9 点），现在是"有设置项且真接线"。编号保留不复用，细节见上面两条里程碑记录
 - 人工验收清单（脚本无法覆盖的 UI 手测项，源自 Task 6/8/9/10/11/12 brief）：
 
 | 项 | 来源 | 手测步骤 | 通过标准 |

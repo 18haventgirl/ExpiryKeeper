@@ -118,8 +118,13 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         repo.softDelete(id)
         NotificationHelper.cancelItem(getApplication(), id)
         ReminderScheduler.runNow(getApplication())
+        // 一次性：snackbar 流 replay=1，配置变更后这条消息会再次可见，用户也可能连点两下。
+        // 不挡住的话第二次会再 save 一遍，把 updatedAt 又刷一次——物品早已恢复，那次写入纯属多余。
+        var undone = false
         _snackbar.emit(
             SnackbarMsg("已删除《${original.name}》", "撤销") {
+                if (undone) return@SnackbarMsg
+                undone = true
                 viewModelScope.launch {
                     repo.save(original)
                     ReminderScheduler.runNow(getApplication())

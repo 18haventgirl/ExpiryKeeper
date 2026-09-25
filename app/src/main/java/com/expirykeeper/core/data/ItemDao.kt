@@ -46,9 +46,6 @@ interface ItemDao {
     @Query("UPDATE items SET deletedAt = :now, updatedAt = :now WHERE id = :id")
     suspend fun softDelete(id: String, now: Long = System.currentTimeMillis())
 
-    @Query("UPDATE items SET quantity = :qty, updatedAt = :now WHERE id = :id")
-    suspend fun setQuantity(id: String, qty: Double, now: Long = System.currentTimeMillis())
-
     @Query("SELECT * FROM items WHERE id = :id")
     fun observeById(id: String): Flow<Item?>
 

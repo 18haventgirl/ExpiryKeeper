@@ -161,4 +161,67 @@ class ExpiryFormTest {
             }
         }
     }
+
+    /**
+     * 用户验收 ①：编辑一件 CONSUMABLE 时表单 quantity 文本留着 "2"，把品类换成药品后
+     * buildItem 照样把 quantity/unit/lowStockThreshold 写回库——物品已经不是那个语义了。
+     * 换类必须清掉别的 kind 的专属字段，且本类字段一个都不能动。
+     */
+    @Test fun `expiry kind keeps its own dates and drops stock plus renewal`() {
+        val stale = Item(
+            id = "a", name = "布洛芬", categoryId = "medicine", reminderKind = ReminderKind.EXPIRY,
+            expireAtEpochDay = 20000, quantity = 2.0, unit = "瓶", lowStockThreshold = 1.0,
+            nextDueAtEpochDay = 19000, recurrenceDays = 30,
+        )
+        val clean = ExpiryForm.scrubForeignFields(stale)
+        assertEquals(20000L, clean.expireAtEpochDay)
+        assertNull(clean.quantity)
+        assertNull(clean.unit)
+        assertNull(clean.lowStockThreshold)
+        assertNull(clean.nextDueAtEpochDay)
+        assertNull(clean.recurrenceDays)
+    }
+
+    @Test fun `consumable keeps stock and drops both time models`() {
+        val stale = Item(
+            id = "b", name = "洗衣液", categoryId = "household", reminderKind = ReminderKind.CONSUMABLE,
+            quantity = 0.4, unit = "瓶", lowStockThreshold = 1.0,
+            expireAtEpochDay = 20000, openedAtEpochDay = 19000, shelfLifeDays = 3,
+            nextDueAtEpochDay = 19500, recurrenceDays = 30,
+        )
+        val clean = ExpiryForm.scrubForeignFields(stale)
+        assertEquals(0.4, clean.quantity!!, 0.0001)
+        assertEquals("瓶", clean.unit)
+        assertEquals(1.0, clean.lowStockThreshold!!, 0.0001)
+        assertNull(clean.expireAtEpochDay)
+        assertNull(clean.openedAtEpochDay)
+        assertNull(clean.shelfLifeDays)
+        assertNull(clean.nextDueAtEpochDay)
+        assertNull(clean.recurrenceDays)
+    }
+
+    @Test fun `recurring keeps its pair and drops expiry plus stock`() {
+        val stale = Item(
+            id = "c", name = "视频会员", categoryId = "subscription", reminderKind = ReminderKind.RECURRING,
+            nextDueAtEpochDay = 19500, recurrenceDays = 30, quantity = 1.0, unit = "月",
+            expireAtEpochDay = 20000, shelfLifeDays = 3,
+        )
+        val clean = ExpiryForm.scrubForeignFields(stale)
+        assertEquals(19500L, clean.nextDueAtEpochDay)
+        assertEquals(30, clean.recurrenceDays)
+        assertNull(clean.quantity)
+        assertNull(clean.unit)
+        assertNull(clean.expireAtEpochDay)
+        assertNull(clean.shelfLifeDays)
+    }
+
+    /** 清过的物品再清一次不该有变化：保存路径可能被别处复用，幂等才好推理 */
+    @Test fun `scrub is idempotent`() {
+        val dirty = Item(
+            id = "d", name = "x", categoryId = "household", reminderKind = ReminderKind.CONSUMABLE,
+            quantity = 1.0, expireAtEpochDay = 5,
+        )
+        val once = ExpiryForm.scrubForeignFields(dirty)
+        assertEquals(once, ExpiryForm.scrubForeignFields(once))
+    }
 }
