@@ -9,15 +9,17 @@ import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.expirykeeper.App
+import com.expirykeeper.core.domain.nextDailyFire
 import java.time.Duration
-import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.ZoneId
 
-/** 每天 9:00 精确闹钟 + 每 24h WorkManager 兜底（闹钟被 ROM 杀掉也能补发） */
+/**
+ * 每天在用户设定的时刻（默认 9:00）打精确闹钟 + 每 24h WorkManager 兜底（闹钟被 ROM 杀掉也能补发）。
+ * 改完设置要重新调 [schedule] 才会换到新时刻——闹钟是一次性的，不重排就还在老点响。
+ */
 object ReminderScheduler {
-    private const val HOUR = 9
     private const val WORK_NAME = "daily-scan"
 
     fun schedule(context: Context) {
@@ -25,16 +27,24 @@ object ReminderScheduler {
         scheduleFallback(context)
     }
 
-    fun runNow(context: Context) {
-        val request = androidx.work.OneTimeWorkRequestBuilder<DailyScanWorker>().build()
+    /**
+     * 立刻跑一轮扫描。默认 **不**过"到点才发"的闸：调用方是用户刚改了数据（续期/延后/恢复）
+     * 或点了通知按钮，此时当场刷新通知栏才是对的；到点判断只约束 24h 兜底那条路。
+     */
+    fun runNow(context: Context, respectSchedule: Boolean = false) {
+        val request = androidx.work.OneTimeWorkRequestBuilder<DailyScanWorker>()
+            .setInputData(
+                androidx.work.workDataOf(DailyScanWorker.KEY_RESPECT_SCHEDULE to respectSchedule),
+            )
+            .build()
         WorkManager.getInstance(context).enqueue(request)
     }
 
     private fun scheduleAlarm(context: Context) {
         if (!canScheduleExact(context)) return
+        val prefs = (context.applicationContext as App).container.prefs
         val manager = context.getSystemService(AlarmManager::class.java)
-        val today9 = LocalDateTime.of(LocalDate.now(), LocalTime.of(HOUR, 0))
-        val next = if (LocalDateTime.now().isBefore(today9)) today9 else today9.plusDays(1)
+        val next = nextDailyFire(LocalDateTime.now(), prefs.reminderHour, prefs.reminderMinute)
         val triggerAt = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
     }

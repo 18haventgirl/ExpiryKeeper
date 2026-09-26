@@ -5,19 +5,21 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,17 +27,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.expirykeeper.core.data.Categories
+import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.domain.DueStatus
-import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.RingSpec
+import com.expirykeeper.core.domain.TodayGroup
+import com.expirykeeper.core.domain.ringSpec
+import com.expirykeeper.core.domain.todayGroup
 import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.core.ui.designsystem.DueRing
 import com.expirykeeper.core.ui.designsystem.EmptyState
 import com.expirykeeper.core.ui.designsystem.ItemCard
+import com.expirykeeper.core.ui.designsystem.QuickActions
 import com.expirykeeper.core.ui.designsystem.SectionHeader
 import com.expirykeeper.core.ui.designsystem.StatusTone
 import com.expirykeeper.ui.ItemsViewModel
@@ -52,15 +59,21 @@ fun TodayScreen(
     val items by vm.items.collectAsStateWithLifecycle()
     val reminders by vm.reminders.collectAsStateWithLifecycle()
     val upcoming14 by vm.upcoming14.collectAsStateWithLifecycle()
+    val loading by vm.isLoading.collectAsStateWithLifecycle()
     val today = LocalDate.now()
 
-    // 分组（controller ruling 8）：紧急=OVERDUE+DUE_TODAY，即将到期=DUE_SOON+RENEWAL_SOON，需要关注=LOW_STOCK+RENEWAL_TODAY
-    val urgent = reminders.filter { it.status == DueStatus.OVERDUE || it.status == DueStatus.DUE_TODAY }
-    val soon = reminders.filter { it.status == DueStatus.DUE_SOON || it.status == DueStatus.RENEWAL_SOON }
-    val attention = reminders.filter { it.status == DueStatus.LOW_STOCK || it.status == DueStatus.RENEWAL_TODAY }
+    // 分组（修 A6）：紧急/需要关注来自引擎提醒；「即将到期」按 1..14 天区间取，与 hero 同一口径。
+    // 引擎的 DUE_SOON 只在命中偏移日时触发（通知不该天天发），所以它不能充当列表数据源。
+    // 归属走 DueStatus.todayGroup()：编译器保证每个状态都有下落，不会有哪类提醒悄悄不上屏。
+    val urgent = reminders.filter { it.status.todayGroup() == TodayGroup.URGENT }
+    val attention = reminders.filter { it.status.todayGroup() == TodayGroup.ATTENTION }
+    val soon = ReminderEngine.soonSection(upcoming14, withinDays = 14L)
+    val rowCount = urgent.size + soon.size + attention.size
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        // 底部留出 FAB 槽，否则最后一张卡的到期环会被 FAB 压住（修 B8，实测弧采样 0/8 坐实）
+        contentPadding = PaddingValues(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
@@ -75,50 +88,76 @@ fun TodayScreen(
             )
         }
         item {
-            // "两周内"只数 0..14 天的未来项；逾期（daysLeft < 0）在"紧急"分组单列，不再重复计入 hero
-            HeroCard(pending = reminders.size, upcoming = upcoming14.count { it.second >= 0L }, total = items.size)
+            // 三个数字各自等于本屏可见行数：待处理=全部行，两周内=即将到期行，全部=清单项数
+            HeroCard(pending = rowCount, upcoming = soon.size, total = items.size)
         }
-        if (reminders.isEmpty()) {
+        if (rowCount == 0 && !loading) {
             item { EmptyState("🌿", "今天没有要处理的事", "去清单看看，或添加新物品") }
         }
         if (urgent.isNotEmpty()) {
-            item { SectionHeader("紧急", urgent.size) }
+            item { SectionHeader("紧急", count = urgent.size, modifier = Modifier.padding(top = 16.dp)) }
             items(urgent, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = true, modifier = Modifier.animateItem())
+                ReminderCard(
+                    item = r.item,
+                    status = r.status,
+                    spec = ringSpec(r.status, r.daysLeft, r.overdueDays, r.item.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                    showActions = true,
+                    actions = {
+                        QuickActions(
+                            onRollForward = { vm.rollForward(r.item.id) },
+                            onSnooze = { vm.snooze3(r) },
+                            onHandle = { vm.markHandled(r) },
+                        )
+                    },
+                )
             }
         }
         if (soon.isNotEmpty()) {
-            item { SectionHeader("即将到期", soon.size) }
-            items(soon, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
+            item { SectionHeader("即将到期", count = soon.size, modifier = Modifier.padding(top = 16.dp)) }
+            items(soon, key = { "soon-${it.first.id}" }) { (soonItem, days) ->
+                ReminderCard(
+                    item = soonItem,
+                    status = DueStatus.DUE_SOON,
+                    spec = ringSpec(DueStatus.DUE_SOON, days, 0, soonItem.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
         if (attention.isNotEmpty()) {
-            item { SectionHeader("需要关注", attention.size) }
+            item { SectionHeader("需要关注", count = attention.size, modifier = Modifier.padding(top = 16.dp)) }
             items(attention, key = { it.notificationId }) { r ->
-                ReminderCard(r = r, vm = vm, onDetail = onDetail, showActions = false, modifier = Modifier.animateItem())
+                ReminderCard(
+                    item = r.item,
+                    status = r.status,
+                    spec = ringSpec(r.status, r.daysLeft, r.overdueDays, r.item.reminderOffsetsDays),
+                    onDetail = onDetail,
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
-        item { Spacer(Modifier.width(1.dp).padding(bottom = 12.dp)) }
     }
 }
 
-/** Hero 卡：三列 displaySmall 统计 + 空日安好事案 */
+/**
+ * Hero 卡：三列统计走「一处下重注」的编辑式层级 —— 待处理是主数字（headlineLarge），
+ * 两周内/全部是次级语境（headlineSmall + 次要色），避免三个 40sp 同权重互相抵消（修 B6）。
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Row(
+    EkCard(title = null, containerColor = MaterialTheme.colorScheme.surfaceContainerHighest) {
+        // FlowRow 而非 Row：大字号（长辈模式 200%）下三个统计会换行而不是被裁（修 B14）
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            HeroStat(pending.toString(), "待处理")
-            HeroStat(upcoming.toString(), "两周内")
-            HeroStat(total.toString(), "全部")
+            HeroStat(pending.toString(), "待处理", prominent = true)
+            HeroStat(upcoming.toString(), "两周内", prominent = false)
+            HeroStat(total.toString(), "全部", prominent = false)
         }
         if (pending == 0) {
             Text(
@@ -132,9 +171,17 @@ private fun HeroCard(pending: Int, upcoming: Int, total: Int) {
 }
 
 @Composable
-private fun HeroStat(value: String, label: String) {
+private fun HeroStat(value: String, label: String, prominent: Boolean) {
     Column {
-        Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text(
+            value,
+            style = if (prominent) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineSmall,
+            color = if (prominent) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
@@ -143,26 +190,26 @@ private fun HeroStat(value: String, label: String) {
     }
 }
 
-/** reminder 卡：ItemCard + DueRing（LOW_STOCK 无天数传 null）；紧急组下方 AnimatedVisibility 动作行 */
+/** 今日行卡：ItemCard + DueRing（环的文本与弧由 ringSpec 决定）；紧急组经 actions 槽挂快捷操作 */
 @Composable
 private fun ReminderCard(
-    r: Reminder,
-    vm: ItemsViewModel,
+    item: Item,
+    status: DueStatus,
+    spec: RingSpec,
     onDetail: (String) -> Unit,
-    showActions: Boolean,
     modifier: Modifier = Modifier,
+    showActions: Boolean = false,
+    actions: @Composable () -> Unit = {},
 ) {
-    val item = r.item
-    val cat = Categories.default(item.categoryId)
+    val tone = StatusTone(status)
     Column(modifier.fillMaxWidth()) {
         ItemCard(
             item = item,
-            icon = ReminderEngine.displayIcon(item, cat.emoji),
-            tone = StatusTone(r.status),
+            icon = ReminderEngine.displayIcon(item, Categories.default(item.categoryId).emoji),
+            tone = tone,
             onClick = { onDetail(item.id) },
-            onLongClick = { onDetail(item.id) },
         ) {
-            DueRing(daysLeft = if (r.status == DueStatus.LOW_STOCK) null else r.daysLeft)
+            DueRing(spec, tone)
         }
         AnimatedVisibility(
             visible = showActions,
@@ -170,13 +217,9 @@ private fun ReminderCard(
             exit = shrinkVertically(),
         ) {
             Row(
-                modifier = Modifier.padding(top = 6.dp),
+                modifier = Modifier.padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AssistChip(onClick = { vm.rollForward(item.id) }, label = { Text("🍽 续期") })
-                AssistChip(onClick = { vm.snooze3(r) }, label = { Text("😴 稍后3天") })
-                AssistChip(onClick = { vm.markHandled(r) }, label = { Text("✅ 今天不再提醒") })
-            }
+            ) { actions() }
         }
     }
 }

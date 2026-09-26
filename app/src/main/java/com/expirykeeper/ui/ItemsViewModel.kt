@@ -2,7 +2,6 @@ package com.expirykeeper.ui
 
 import android.app.Application
 import android.net.Uri
-import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.expirykeeper.App
@@ -13,6 +12,7 @@ import com.expirykeeper.core.data.ItemSort
 import com.expirykeeper.core.domain.Backup
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.RestorePlan
 import com.expirykeeper.notifications.NotificationHelper
 import com.expirykeeper.notifications.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,7 +52,15 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     private val _snackbar = MutableSharedFlow<SnackbarMsg>(replay = 1, extraBufferCapacity = 4)
     val snackbar: SharedFlow<SnackbarMsg> = _snackbar.asSharedFlow()
 
+    /**
+     * Room 首包是否已到。修 B4：items 的初值是 emptyList，加载中的那一帧与「真没有数据」
+     * 长得一样，UI 会先闪一次「还没有物品」。首包到达后置为已完成。
+     */
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     val items: StateFlow<List<Item>> = repo.observeAll()
+        .onEach { _isLoading.value = false }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 今日应提醒的条目（引擎 computeForDate 快照） */
@@ -61,14 +71,25 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
     val upcoming14: StateFlow<List<Pair<Item, Long>>> = items.map { ReminderEngine.upcoming(it, today) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** 清单搜索关键词：匹配 名称/备注/位置，忽略大小写；空串 = 不过滤 */
-    val filterQuery = MutableStateFlow("")
+    /**
+     * 清单搜索关键词：匹配 名称/备注/位置，忽略大小写；空串 = 不过滤。
+     * 对外只暴露 StateFlow + setter，UI 拿不到写入口（此前 `vm.filterQuery.value =` 是直写）。
+     */
+    private val _filterQuery = MutableStateFlow("")
+    val filterQuery: StateFlow<String> = _filterQuery.asStateFlow()
+    fun setFilterQuery(value: String) {
+        _filterQuery.value = value
+    }
 
     /** 清单排序方式（仅会话内记忆，不持久化） */
-    val sortOrder = MutableStateFlow(ItemSort.EXPIRE_ASC)
+    private val _sortOrder = MutableStateFlow(ItemSort.EXPIRE_ASC)
+    val sortOrder: StateFlow<ItemSort> = _sortOrder.asStateFlow()
+    fun setSortOrder(value: ItemSort) {
+        _sortOrder.value = value
+    }
 
     /** items × filterQuery × sortOrder 派生：过滤 + 4 路排序后的可见清单 */
-    val visibleItems: StateFlow<List<Item>> = combine(items, filterQuery, sortOrder) { list, q, sort ->
+    val visibleItems: StateFlow<List<Item>> = combine(items, _filterQuery, _sortOrder) { list, q, sort ->
         list.asSequence()
             .filter {
                 q.isBlank() ||
@@ -97,8 +118,13 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         repo.softDelete(id)
         NotificationHelper.cancelItem(getApplication(), id)
         ReminderScheduler.runNow(getApplication())
+        // 一次性：snackbar 流 replay=1，配置变更后这条消息会再次可见，用户也可能连点两下。
+        // 不挡住的话第二次会再 save 一遍，把 updatedAt 又刷一次——物品早已恢复，那次写入纯属多余。
+        var undone = false
         _snackbar.emit(
             SnackbarMsg("已删除《${original.name}》", "撤销") {
+                if (undone) return@SnackbarMsg
+                undone = true
                 viewModelScope.launch {
                     repo.save(original)
                     ReminderScheduler.runNow(getApplication())
@@ -122,10 +148,10 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         prefs.dynamicColor = value
     }
 
-    /** 快速操作·续期：按保质期/周期滚期；无法推导只 Toast 提示去编辑（Task 11 前有 snackbar 再升级） */
+    /** 快速操作·续期：按保质期/周期滚期；无法推导时把原因发到 Snackbar 总线（修 B18，反馈只有一条通道） */
     fun rollForward(id: String) = viewModelScope.launch {
         if (!repo.rollForward(id, today)) {
-            Toast.makeText(getApplication(), "这件没有保质期或周期规则，去编辑里补上", Toast.LENGTH_SHORT).show()
+            _snackbar.emit(SnackbarMsg("这件没有保质期或周期规则，去编辑里补上"))
         }
         NotificationHelper.cancelItem(getApplication(), id)
         ReminderScheduler.runNow(getApplication())
@@ -147,12 +173,12 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun getById(id: String): Item? = repo.getById(id)
 
-    /** 导出全部存活条目到 SAF uri；IO 全在 viewModelScope + Dispatchers.IO，回调回到主线程 */
+    /** 导出全量（含墓碑）到 SAF uri；IO 全在 viewModelScope + Dispatchers.IO，回调回到主线程 */
     fun exportBackup(uri: Uri, onDone: (Result<Int>) -> Unit) {
         viewModelScope.launch {
             onDone(runCatching {
                 withContext(Dispatchers.IO) {
-                    val all = repo.getAll()
+                    val all = repo.getAllIncludingTombstones()
                     val json = Backup.toJson(all)
                     val stream = getApplication<Application>().contentResolver.openOutputStream(uri)
                         ?: throw IOException("无法写入所选文件")
@@ -163,16 +189,37 @@ class ItemsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 导入：整文件先解析校验（Backup.parse 抛类型化异常），任何垃圾数据都不会触碰到库 */
-    fun importBackup(uri: Uri, onDone: (Result<Pair<Int, Int>>) -> Unit) {
+    /**
+     * 恢复第一步：读文件 → 严格解析（垃圾数据一律不入库）→ 与本地比对出[RestorePlan]。
+     * **不写任何东西**，UI 拿计划去弹确认框，用户点头才有第二步。
+     */
+    fun inspectBackup(uri: Uri, onResult: (Result<RestorePlan?>) -> Unit) {
         viewModelScope.launch {
-            onDone(runCatching {
+            onResult(runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = getApplication<Application>().contentResolver.openInputStream(uri)
                         ?: throw IOException("无法读取所选文件")
                     val text = stream.bufferedReader().use { it.readText() }
-                    val incoming = Backup.parse(text)
-                    repo.importMerged(incoming).also { ReminderScheduler.runNow(getApplication()) }
+                    repo.planRestore(Backup.parse(text))
+                }
+            })
+        }
+    }
+
+    /**
+     * 恢复第二步：整库替换。
+     *
+     * 这里**故意不做"撤销条"**（2026-09-25 用户裁决，此前我加过一次又被要求拆掉）：
+     * 唯一的保护就是动手前那次确认——它必须把"写回几条、移出几条"报清楚。
+     * 被移出的物品只打墓碑不物理删，所以真后悔了还能靠更早的备份找回。
+     */
+    fun applyRestore(plan: RestorePlan, onDone: (Result<Int>) -> Unit) {
+        viewModelScope.launch {
+            onDone(runCatching {
+                withContext(Dispatchers.IO) {
+                    val written = repo.restore(plan)
+                    ReminderScheduler.runNow(getApplication())
+                    written
                 }
             })
         }

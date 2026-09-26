@@ -1,5 +1,7 @@
 package com.expirykeeper.core.data
 
+import com.expirykeeper.core.domain.Restore
+import com.expirykeeper.core.domain.RestorePlan
 import kotlinx.coroutines.flow.Flow
 
 class ItemRepository(
@@ -11,6 +13,14 @@ class ItemRepository(
     fun observeAll(): Flow<List<Item>> = itemDao.observeAll()
 
     suspend fun getAll(): List<Item> = itemDao.getAll()
+
+    /**
+     * 导出用全量读取（含墓碑）。恢复本身是整库替换，"文件里没有"就足以让物品消失；
+     * 带上墓碑是为了让备份保住**删除发生的时间**：恢复后这些行的 deletedAt/updatedAt
+     * 是当初真删的那一刻，而不是"恢复动作发生的这一刻"，详情浮层与后续判断才有据可依。
+     */
+    suspend fun getAllIncludingTombstones(): List<Item> = itemDao.getAllIncludingTombstones()
+
 
     suspend fun getById(id: String): Item? = itemDao.getById(id)
 
@@ -89,53 +99,41 @@ class ItemRepository(
     suspend fun rollCount30d(): Int =
         eventDao.rollCountSince(java.time.LocalDate.now().minusDays(30).toEpochDay())
 
-    suspend fun consumeOne(id: String) {
-        val item = itemDao.getById(id) ?: return
-        val now = System.currentTimeMillis()
-        val qty = (item.quantity ?: 1.0) - 1.0
-        // 单次操作只读一次时间：数量行的 updatedAt 与 change_log 水位共用同一 now
-        itemDao.setQuantity(id, qty.coerceAtLeast(0.0), now)
-        changeLogDao.insert(ChangeLogEntry(itemId = id, op = "upsert", updatedAt = now, deviceId = deviceId))
-    }
-
-    /** M3 用：返回 seq 水位，之后取增量 */
-    suspend fun changeLogSince(seq: Long): List<ChangeLogEntry> = changeLogDao.since(seq)
+    /**
+     * 恢复预览：拿本地全量（**含墓碑**）与文件比对，算出"写回什么、移出什么"的账目，
+     * 供确认框在动手之前把数字报给用户。本地快照必须含墓碑，否则"备份里已删、本地还在"
+     * 的那条会被当成移出对象重复计一次。
+     */
+    suspend fun planRestore(incoming: List<Item>): RestorePlan? =
+        Restore.plan(itemDao.getAllIncludingTombstones(), incoming)
 
     /**
-     * 恢复入口：与本地 LWW 合并后写入，绝不清空数据库。
+     * 执行恢复 = **时间点还原**：整库换成备份那一刻的样子，不做 last-writer-wins
+     * （那是合并语义，用在恢复上会让"导出→改一条→导入"什么都恢复不回来，2026-09-25 验收推翻）。
      *
-     * 先按 id 对 incoming 去重（同 id 保留 updatedAt 最大的一条）再进 SyncMerge：
-     * SyncMerge 只拿 incoming 与"写库前的本地快照"逐条比较，对文件内部自相矛盾的
-     * 重复条目不设防——若不去重，同一 id 的旧记录排在后面会把先写入的新记录盖掉。
+     * 三条不变量：
+     * 1. 用户数据行永不物理删除——备份里没有的那些只打墓碑，导一份更新的备份就能带回来；
+     * 2. 清空 + 写入在 [ItemDao.replaceWith] 的同一事务里，中途崩溃不会留下半份清单；
+     * 3. 写入保留文件里的 updatedAt（不走 [save]）——[save] 会把时间戳刷成"刚刚"，
+     *    恢复后的库就带着一堆假历史，下一次恢复又被误判。
      *
-     * 写入走 [upsertRaw] 而非 [save]：save 会重新盖 updatedAt 时间戳，
-     * 销毁备份文件携带的 LWW 历史，导致下一次合并误判。
-     *
-     * 本地快照用 [getAllIncludingTombstones] 而非 [getAll]：墓碑必须参与合并比较，
-     * 否则"本地已删 + 备份里更旧的存活记录"会被判为不存在而重新插入（删除丢失）。
-     * 墓碑参与后 LWW 语义自然成立：incoming.updatedAt >= 墓碑.updatedAt 才允许
-     * 复活（正确的"编辑晚于删除"路径），否则跳过、删除保持。
-     *
-     * @return written（实际落库条数）与 skipped（incoming 总数 − written，
-     *         含去重折叠与本地更新被 LWW 拒绝两类，账目诚实）
+     * @return 写回的条数（含墓碑）
      */
-    suspend fun importMerged(incoming: List<Item>): Pair<Int, Int> {
-        val deduped = incoming.groupBy { it.id }.values.map { group -> group.maxBy { it.updatedAt } }
-        val result = com.expirykeeper.core.domain.SyncMerge.merge(itemDao.getAllIncludingTombstones(), deduped)
-        result.toWrite.forEach { upsertRaw(it) }
-        return result.toWrite.size to (incoming.size - result.toWrite.size)
-    }
-
-    /** 原始写入：不动 updatedAt；change_log 记物品自身的 updatedAt，deviceId 用本机 */
-    private suspend fun upsertRaw(item: Item) {
-        itemDao.upsert(item)
-        changeLogDao.insert(
-            ChangeLogEntry(
-                itemId = item.id,
-                op = if (item.deletedAt != null) "delete" else "upsert",
-                updatedAt = item.updatedAt,
-                deviceId = deviceId,
-            )
+    suspend fun restore(plan: RestorePlan): Int {
+        val now = System.currentTimeMillis()
+        val removed = plan.removed.map { it.copy(deletedAt = now, updatedAt = now, lastModifiedBy = deviceId) }
+        val rows = plan.rows + removed
+        itemDao.replaceWith(rows)
+        changeLogDao.insertAll(
+            rows.map {
+                ChangeLogEntry(
+                    itemId = it.id,
+                    op = if (it.deletedAt != null) "delete" else "upsert",
+                    updatedAt = it.updatedAt,
+                    deviceId = deviceId,
+                )
+            },
         )
+        return rows.size
     }
 }

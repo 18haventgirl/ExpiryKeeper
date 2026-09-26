@@ -6,7 +6,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,13 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -39,26 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
+import com.expirykeeper.core.data.SubCategory
+import com.expirykeeper.core.domain.dateZh
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-/** 表单分区卡：SectionHeader 式大标题 + 统一内边距，四段式布局的容器 */
-@Composable
-fun FormCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            content()
-        }
-    }
-}
 
 /** 行内校验错误：labelSmall + error 色（替代 Toast，随字段常驻提示） */
 @Composable
@@ -80,13 +64,35 @@ fun CategoryStrip(selected: String, onPick: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Categories.all.forEach { preset: CategoryPreset ->
-            PCategoryChip(preset = preset, selected = preset.id == selected, onPick = onPick)
+            CategoryChip(preset = preset, selected = preset.id == selected, onPick = onPick)
+        }
+    }
+}
+
+/** 常见物品模板行：点一下预填名称/emoji/保质期。模板只是录入加速器，不落库 */
+@Composable
+fun SubCategoryStrip(templates: List<SubCategory>, onPick: (SubCategory) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "常见",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        templates.forEach { sub ->
+            AssistChip(
+                onClick = { onPick(sub) },
+                label = { Text("${sub.emoji} ${sub.name}") },
+            )
         }
     }
 }
 
 @Composable
-private fun PCategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (String) -> Unit) {
+private fun CategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (String) -> Unit) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     Column(
@@ -94,6 +100,7 @@ private fun PCategoryChip(preset: CategoryPreset, selected: Boolean, onPick: (St
             .width(68.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(bg, RoundedCornerShape(16.dp))
+            .minimumInteractiveComponentSize()
             .clickable { onPick(preset.id) }
             .padding(vertical = 10.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -118,7 +125,7 @@ fun DateField(label: String, value: LocalDate?, onValue: (LocalDate?) -> Unit) {
     var showPicker by remember { mutableStateOf(false) }
     OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
         Text(
-            value?.let { "$label：${it.format(DateTimeFormatter.ISO_DATE)}" } ?: "$label（点击选择）",
+            value?.let { "$label：${dateZh(it, LocalDate.now())}" } ?: "$label（点击选择）",
             maxLines = 1,
         )
     }

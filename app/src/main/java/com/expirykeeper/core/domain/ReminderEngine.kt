@@ -3,8 +3,10 @@ package com.expirykeeper.core.domain
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY }
+enum class DueStatus { DUE_SOON, DUE_TODAY, OVERDUE, LOW_STOCK, RENEWAL_SOON, RENEWAL_TODAY, RENEWAL_OVERDUE }
 
 /** 到期状态的中文标签：列表 / 详情 / 通知共用（Task 12 前置：自 UI 私有扩展上收） */
 val DueStatus.labelZh: String
@@ -15,6 +17,7 @@ val DueStatus.labelZh: String
         DueStatus.LOW_STOCK -> "库存低"
         DueStatus.RENEWAL_SOON -> "即将续费"
         DueStatus.RENEWAL_TODAY -> "今天续费"
+        DueStatus.RENEWAL_OVERDUE -> "续费逾期"
     }
 
 data class Reminder(
@@ -25,6 +28,50 @@ data class Reminder(
     val overdueDays: Long,
     val notificationId: Int,
 )
+
+/**
+ * 中文日期：本年只写「9月20日」，跨年补年份 —— 家人看到孤零零的「1月5日」会想不起是哪年。
+ * 取代此前散落的 ISO_DATE / yyyy-MM-dd / M月d日 三种写法。
+ */
+fun dateZh(day: LocalDate, today: LocalDate): String {
+    val pattern = if (day.year == today.year) "M月d日" else "yyyy年M月d日"
+    return day.format(DateTimeFormatter.ofPattern(pattern, Locale.CHINA))
+}
+
+/** 相对天数中文文案（修 A5：清单尾部不再挂一个看不出意思的「—」） */
+fun daysCaption(daysLeft: Long): String = when {
+    daysLeft < 0 -> "逾 ${-daysLeft} 天"
+    daysLeft == 0L -> "今天"
+    else -> "剩 $daysLeft 天"
+}
+
+/** 到期环显示规格：中心文本 + 弧比例（配色由 UI 侧 StatusTone 决定，不在此重复表达） */
+data class RingSpec(val text: String, val fraction: Float)
+
+/**
+ * 到期环该显示什么：逾期显示「已逾期几天」并走满环，今天到期显示「今」，其余按窗口递减。
+ * 窗口取 max(14, 最远提前量)，否则药品类 60/30 天偏移的物品永远满环（修 A4）。
+ */
+fun ringSpec(status: DueStatus, daysLeft: Long?, overdueDays: Long, offsets: List<Int>): RingSpec {
+    val window = maxOf(14L, offsets.maxOrNull()?.toLong() ?: 0L)
+    return when {
+        daysLeft == null -> RingSpec("·", 0f)
+        status == DueStatus.OVERDUE || status == DueStatus.RENEWAL_OVERDUE -> RingSpec(overdueDays.toString(), 1f)
+        status == DueStatus.DUE_TODAY || status == DueStatus.RENEWAL_TODAY -> RingSpec("今", 0f)
+        else -> RingSpec(daysLeft.toString(), (daysLeft.toFloat() / window).coerceIn(0f, 1f))
+    }
+}
+
+/** 今日屏的分组归属。用枚举函数而不是两处 `filter`：新增状态时编译器会逼着表态，
+ *  不会再出现"引擎报了、屏幕上根本没有这一类"的静默失踪（RENEWAL_OVERDUE 就是这么漏过一次）。 */
+enum class TodayGroup { URGENT, ATTENTION, SOON_ONLY }
+
+fun DueStatus.todayGroup(): TodayGroup = when (this) {
+    DueStatus.OVERDUE, DueStatus.DUE_TODAY, DueStatus.RENEWAL_OVERDUE -> TodayGroup.URGENT
+    DueStatus.LOW_STOCK, DueStatus.RENEWAL_TODAY -> TodayGroup.ATTENTION
+    // 未到期的" soon" 类不进这两组：它们由今日屏 1..14 天窗口那条路径渲染，见 soonSection
+    DueStatus.DUE_SOON, DueStatus.RENEWAL_SOON -> TodayGroup.SOON_ONLY
+}
 
 /** 纯函数规则引擎：不依赖 Android，输入物品快照 + 今天，输出今天应发的提醒 */
 object ReminderEngine {
@@ -74,27 +121,37 @@ object ReminderEngine {
         val nextDue = item.nextDueAtEpochDay ?: return null
         val daysLeft = nextDue - today.toEpochDay()
         val status = when {
+            // 扣费日过了就是"续费逾期"，天天报，与 EXPIRY 逾期对称。
+            // 以前这里落到 else → null：订阅一过期就永远静默，而牛奶过期会天天喊。
+            daysLeft < 0 -> DueStatus.RENEWAL_OVERDUE
             daysLeft == 0L -> DueStatus.RENEWAL_TODAY
             daysLeft in 1..7 && item.reminderOffsetsDays.any { off -> daysLeft == off.toLong() } -> DueStatus.RENEWAL_SOON
             else -> return null
         }
-        return Reminder(item, status, daysLeft, 0, notifIdFor(item.id, status, today))
+        return Reminder(item, status, daysLeft.coerceAtLeast(0), (-daysLeft).coerceAtLeast(0), notifIdFor(item.id, status, today))
+    }
+
+    /** 该物品「下一次该看的日子」：EXPIRY 用到期日（含开封推导），RECURRING 用下次扣费日，CONSUMABLE 无 */
+    fun dueDayOf(item: Item): Long? = when (item.reminderKind) {
+        // Task 4 carry-over：EXPIRY 走派生到期日（开封+保质期），不能只读 raw 字段
+        ReminderKind.EXPIRY -> effectiveExpireDay(item)
+        ReminderKind.RECURRING -> item.nextDueAtEpochDay
+        ReminderKind.CONSUMABLE -> null
     }
 
     /** 今日 + 未来 withinDays 内的到期摘要（"今日"屏排序用） */
     fun upcoming(items: List<Item>, today: LocalDate, withinDays: Long = 14): List<Pair<Item, Long>> =
         items.filter { it.deletedAt == null }
             .mapNotNull { item ->
-                val epoch = when (item.reminderKind) {
-                    // Task 4 carry-over：EXPIRY 走派生到期日（开封+保质期），不能只读 raw 字段
-                    ReminderKind.EXPIRY -> effectiveExpireDay(item)
-                    ReminderKind.RECURRING -> item.nextDueAtEpochDay
-                    ReminderKind.CONSUMABLE -> null
-                } ?: return@mapNotNull null
+                val epoch = dueDayOf(item) ?: return@mapNotNull null
                 item to (epoch - today.toEpochDay())
             }
             .filter { it.second <= withinDays }
             .sortedBy { it.second }
+
+    /** 今日屏「即将到期」组：未来 1..withinDays 天内的全部物品，与 hero 计数同一口径（修 A6） */
+    fun soonSection(upcoming: List<Pair<Item, Long>>, withinDays: Long): List<Pair<Item, Long>> =
+        upcoming.filter { it.second in 1..withinDays }.sortedBy { it.second }
 
     /** 通知 id 纯函数：UI 取消既有通知与引擎发通知共用同一算法，LOW_STOCK 传 date=null */
     fun notifIdFor(itemId: String, status: DueStatus, date: LocalDate?): Int =

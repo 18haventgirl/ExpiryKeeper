@@ -5,11 +5,13 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,9 +38,12 @@ import androidx.compose.ui.unit.dp
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
+import com.expirykeeper.core.data.SubCategory
 import com.expirykeeper.core.domain.ExpiryForm
 import com.expirykeeper.core.domain.ExpiryFormMode
+import com.expirykeeper.core.domain.RuleState
 import com.expirykeeper.core.ui.designsystem.BigHeader
+import com.expirykeeper.core.ui.designsystem.EkCard
 import com.expirykeeper.ui.ItemsViewModel
 import java.time.LocalDate
 
@@ -75,6 +81,7 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
     var recurrenceText by remember { mutableStateOf("") }
     var moreOpen by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(itemId == null) }
+    var revealed by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId) {
         if (itemId != null) {
@@ -109,7 +116,13 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             loaded = true
         }
     }
-    if (!loaded) return
+    if (!loaded) {
+        // 修 B4：编辑既有物品时不再整页空帧，回填前给一个居中的加载指示
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     val cat = Categories.default(categoryId)
     val shelfLife = if (shelfCustom) ExpiryForm.parseDays(shelfText) else shelfChoice
@@ -119,28 +132,52 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
     val thresholdErr = positiveNumErr(threshold, "低库存线")
 
     val nameErr = if (name.isBlank()) "请填写物品名称" else null
-    val ruleErr = when (cat.reminderKind) {
-        ReminderKind.EXPIRY -> when {
-            expiryMode == ExpiryFormMode.DATE && expireDate == null -> "请选择到期日期"
-            expiryMode == ExpiryFormMode.OPENED && openedDate == null -> "请选择开封日期"
-            expiryMode == ExpiryFormMode.OPENED && shelfLife == null -> "请选择或输入保质期（1~3650 天）"
-            else -> null
-        }
-        ReminderKind.CONSUMABLE -> qtyErr ?: thresholdErr
-        // I-4：无效/未选周期走行内错误（与保质期同法），不再在 buildItem 里静默回退旧值
-        ReminderKind.RECURRING -> when {
-            nextDueDate == null -> "请选择下次扣费日期"
-            recurrence == null -> "请选择或输入续费周期（1~3650 天）"
-            else -> null
-        }
-    }
+    val ruleErr = ExpiryForm.ruleError(
+        RuleState(
+            kind = cat.reminderKind,
+            mode = expiryMode,
+            expireDate = expireDate,
+            openedDate = openedDate,
+            shelfLife = shelfLife,
+            nextDueDate = nextDueDate,
+            recurrence = recurrence,
+            quantityError = qtyErr,
+            thresholdError = thresholdErr,
+        ),
+    )
     val valid = nameErr == null && ruleErr == null && !shelfInvalid
+    // 修 A3：错误文本只在用户按过一次保存后才出现，新建首帧不再满屏红
+    val shownNameErr = nameErr.takeIf { revealed }
+    val shownRuleErr = ruleErr.takeIf { revealed }
 
     fun pickCategory(picked: String) {
         categoryId = picked
         val preset = Categories.default(picked)
         offsetsText = preset.defaultOffsetsDays.joinToString(",")
         shelfChoice = null; shelfCustom = false; shelfText = ""
+    }
+
+    /** 常见物品模板：一次点击填好名称/emoji/天数，用户随后可改（模板不落库） */
+    fun applyTemplate(sub: SubCategory) {
+        val fill = ExpiryForm.planFill(sub, name, cat.reminderKind, LocalDate.now())
+        name = fill.name
+        emoji = fill.emoji
+        when (cat.reminderKind) {
+            ReminderKind.EXPIRY -> if (fill.days != null) {
+                val days = fill.days
+                expiryMode = ExpiryFormMode.OPENED
+                openedDate = fill.openedDate
+                shelfChoice = days.takeIf { it in cat.defaultShelfLifeChoicesDays }
+                shelfCustom = shelfChoice == null
+                shelfText = if (shelfCustom) days.toString() else ""
+            }
+            ReminderKind.RECURRING -> fill.days?.let { days ->
+                recurrenceChoice = days.takeIf { it in RecurrenceChoices }
+                recurrenceCustom = recurrenceChoice == null
+                recurrenceText = if (recurrenceCustom) days.toString() else ""
+            }
+            ReminderKind.CONSUMABLE -> Unit
+        }
     }
 
     fun switchExpiryMode(mode: ExpiryFormMode) {
@@ -164,29 +201,18 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             quantity = quantity.toDoubleOrNull(),
             unit = unit.trim().ifBlank { null },
             lowStockThreshold = threshold.toDoubleOrNull(),
+            nextDueAtEpochDay = nextDueDate?.toEpochDay(),
+            recurrenceDays = recurrence, // I-4：无静默回退；invalid/未选时按钮已被 ruleErr 禁用
         )
-        // I-3b：按目标 reminderKind 重建，显式清空其他 kind 的专属字段，
-        // 使"编辑换类"落库形态与新建同 kind 一致（新建默认全 null），不携带原 kind 脏值。
-        // quantity/unit/lowStockThreshold 恒由 CONSUMABLE 表单文本派生（非该类时为空→null），无需再清。
-        return when (cat.reminderKind) {
-            // 互斥清理走 ExpiryForm：换模式即清空另一侧字段，到期日派生留给 repo.save
-            ReminderKind.EXPIRY -> {
-                val expiry = when (expiryMode) {
-                    ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
-                    ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
-                }
-                expiry.copy(nextDueAtEpochDay = null, recurrenceDays = null)
+        // EXPIRY 还分"填日期 / 开封+保质期"两种子形态，先定型
+        val shaped = if (cat.reminderKind == ReminderKind.EXPIRY) {
+            when (expiryMode) {
+                ExpiryFormMode.DATE -> ExpiryForm.applyDateMode(item, expireDate?.toEpochDay())
+                ExpiryFormMode.OPENED -> ExpiryForm.applyOpenedMode(item, openedDate?.toEpochDay(), shelfLife)
             }
-            ReminderKind.RECURRING -> item.copy(
-                nextDueAtEpochDay = nextDueDate?.toEpochDay(),
-                recurrenceDays = recurrence, // I-4：无静默回退；invalid/未选时按钮已被 ruleErr 禁用
-                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
-            )
-            ReminderKind.CONSUMABLE -> item.copy(
-                expireAtEpochDay = null, openedAtEpochDay = null, shelfLifeDays = null,
-                nextDueAtEpochDay = null, recurrenceDays = null,
-            )
-        }
+        } else item
+        // 再统一清掉别的 kind 的专属字段（修 ①：编辑换类时表单里留着上一类的值）
+        return ExpiryForm.scrubForeignFields(shaped)
     }
 
     Column(
@@ -201,24 +227,29 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
             modifier = Modifier.padding(top = 8.dp),
         )
 
-        FormCard("品类") { CategoryStrip(selected = categoryId, onPick = { pickCategory(it) }) }
+        EkCard("品类") {
+            CategoryStrip(selected = categoryId, onPick = { pickCategory(it) })
+            if (cat.subcategories.isNotEmpty()) {
+                SubCategoryStrip(cat.subcategories) { applyTemplate(it) }
+            }
+        }
 
-        FormCard("名称与图标") {
+        EkCard("名称与图标") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("物品名称 *") }, isError = nameErr != null, singleLine = true,
+                    label = { Text("物品名称 *") }, isError = shownNameErr != null, singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(12.dp))
                 EmojiIconButton(display = emoji ?: cat.emoji) { showEmojiSheet = true }
             }
-            ErrorLine(nameErr)
+            ErrorLine(shownNameErr)
             Text("点右侧图标可自选 emoji，默认跟随品类", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        FormCard("到期规则") {
+        EkCard("到期规则") {
             when (cat.reminderKind) {
                 ReminderKind.EXPIRY -> ExpiryRuleSection(
                     shelfChoices = cat.defaultShelfLifeChoicesDays
@@ -255,10 +286,10 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
                     onTextChange = { recurrenceText = it },
                 )
             }
-            ErrorLine(ruleErr)
+            ErrorLine(shownRuleErr)
         }
 
-        FormCard("更多设置") {
+        EkCard("更多设置") {
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { moreOpen = !moreOpen },
                 verticalAlignment = Alignment.CenterVertically,
@@ -286,14 +317,21 @@ fun AddEditScreen(vm: ItemsViewModel, itemId: String?, onDone: () -> Unit) {
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(enabled = valid, onClick = { vm.save(buildItem()); onDone() },
-                modifier = Modifier.weight(1f)) {
+            // 保存不置灰：无效时点一次即揭示缺什么（修 A3，同时消掉不可读的禁用态文字）
+            Button(onClick = {
+                if (valid) {
+                    vm.save(buildItem())
+                    onDone()
+                } else {
+                    revealed = true
+                }
+            }, modifier = Modifier.weight(1f)) {
                 Text(if (editing == null) "保存" else "更新")
             }
             // 删除入口唯一在详情浮层（Task 11：deleteWithUndo 可撤销），此处不再提供
             TextButton(onClick = onDone) { Text("取消") }
         }
-        Spacer(Modifier.width(1.dp).padding(bottom = 24.dp))
+        Spacer(Modifier.height(24.dp))
     }
 
     if (showEmojiSheet) {

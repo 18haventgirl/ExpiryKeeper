@@ -7,13 +7,16 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.expirykeeper.App
 import com.expirykeeper.MainActivity
 import com.expirykeeper.R
 import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.Reminder
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.shouldNotifyNow
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 object NotificationHelper {
     const val CHANNEL_ID = "expiry_reminders"
@@ -33,7 +36,8 @@ object NotificationHelper {
 
     /**
      * 取消某物品所有可能的既有通知：notifId 是 (itemId, status, date) 纯函数，
-     * 对 6 种 status × {today, today-1} 重算 cancel（LOW_STOCK 的 id 与日期无关，走 static 变体）。
+     * 对全部 status × {today, today-1} 重算 cancel（走 entries 枚举，加新状态不必改这里；
+     * LOW_STOCK 的 id 与日期无关，走 static 变体）。
      */
     fun cancelItem(ctx: Context, itemId: String) {
         val today = LocalDate.now()
@@ -62,6 +66,29 @@ object NotificationHelper {
         )
     }
 
+    /**
+     * 每日提醒的统一出口。
+     *
+     * `respectSchedule = true` 时先过 [shouldNotifyNow] 这道闸——那是 WorkManager 每 24h 的
+     * 兜底路径，它自己的调度时刻和用户设定的时刻无关，不拦就会出现"设了 20:00 却凌晨 3 点弹"。
+     * 精确闹钟本身（正点）和用户操作后的 runNow 传 false：前者就是到点了，后者是用户在
+     * 改数据，理应当场刷新（notifyAll 顺带清扫陈旧子通知，跳过它反而会让旧通知滞留）。
+     */
+    fun postDailyReminders(
+        context: Context,
+        reminders: List<Reminder>,
+        respectSchedule: Boolean,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): Boolean {
+        val prefs = (context.applicationContext as App).container.prefs
+        if (respectSchedule &&
+            !shouldNotifyNow(now, prefs.reminderHour, prefs.reminderMinute, prefs.lastNotifiedDay)
+        ) return false
+        notifyAll(context, reminders)
+        prefs.lastNotifiedDay = now.toLocalDate()
+        return true
+    }
+
     fun notifyAll(context: Context, reminders: List<Reminder>) {
         ensureChannel(context)
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -70,7 +97,9 @@ object NotificationHelper {
         // notifIdFor 是纯哈希无法反查全集，故以系统活动通知列表为准；cancelAll 会误伤前台/其它
         // 通知，绝不使用。
         val keepIds = reminders.map { it.notificationId }.toHashSet().apply { add(SUMMARY_ID) }
-        manager.activeNotifications.forEach { act ->
+        // activeNotifications 在文档上是"永不返回 null"，但部分国产 ROM 会返回 null；
+        // 这里在 WorkManager 后台线程跑，抛 NPE 等于整轮提醒静默失败，兜一个空数组。
+        (manager.activeNotifications ?: emptyArray()).forEach { act ->
             if (act.notification?.channelId == CHANNEL_ID && act.id !in keepIds) manager.cancel(act.id)
         }
         val grouped = reminders.size > 1 // 单条不挂组机制，避免摘要闪烁
@@ -95,6 +124,7 @@ object NotificationHelper {
                 DueStatus.LOW_STOCK -> "「${reminder.item.name}」库存不足，该补货了"
                 DueStatus.RENEWAL_SOON -> "「${reminder.item.name}」还有 ${reminder.daysLeft} 天扣费"
                 DueStatus.RENEWAL_TODAY -> "「${reminder.item.name}」今天扣费，不需要就取消订阅"
+                DueStatus.RENEWAL_OVERDUE -> "「${reminder.item.name}」扣费日已过 ${reminder.overdueDays} 天，没在用的话记得取消"
             }
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)

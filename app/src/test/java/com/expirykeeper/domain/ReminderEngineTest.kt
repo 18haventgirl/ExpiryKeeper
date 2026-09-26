@@ -4,6 +4,12 @@ import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ReminderKind
 import com.expirykeeper.core.domain.DueStatus
 import com.expirykeeper.core.domain.ReminderEngine
+import com.expirykeeper.core.domain.TodayGroup
+import com.expirykeeper.core.domain.todayGroup
+import com.expirykeeper.core.domain.daysCaption
+import com.expirykeeper.core.domain.dateZh
+import com.expirykeeper.core.domain.labelZh
+import com.expirykeeper.core.domain.ringSpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -58,6 +64,62 @@ class ReminderEngineTest {
         assertEquals(DueStatus.RENEWAL_SOON, ReminderEngine.computeOne(item, today)!!.status)
         assertEquals(DueStatus.RENEWAL_TODAY, ReminderEngine.computeOne(item.copy(nextDueAtEpochDay = epoch), today)!!.status)
         assertNull(ReminderEngine.computeOne(item.copy(nextDueAtEpochDay = epoch + 4), today))
+    }
+
+    private fun recurringItem(daysToRenew: Long) = Item(
+        id = "r-$daysToRenew", name = "视频会员", categoryId = "subscription",
+        reminderKind = ReminderKind.RECURRING, nextDueAtEpochDay = epoch + daysToRenew,
+        reminderOffsetsDays = listOf(3, 0),
+    )
+
+    /**
+     * 用户验收 2026-09-25 报告的不对称：EXPIRY 逾期天天报，RECURRING 扣费日一过
+     * 引擎返回 null → 订阅过期完全静默，永远不再吭声。
+     */
+    @Test fun `recurring overdue fires instead of going silent`() {
+        val r = ReminderEngine.computeOne(recurringItem(-3), today)!!
+        assertEquals(DueStatus.RENEWAL_OVERDUE, r.status)
+        assertEquals(3L, r.overdueDays)
+        assertEquals(0L, r.daysLeft)
+    }
+
+    /** 报到会多久：每天都报，逾期 200 天也一样——静默只会让遗忘变成长期状态 */
+    @Test fun `recurring overdue keeps firing however long it has been lapsed`() {
+        listOf(-1L, -7L, -200L).forEach { d ->
+            assertEquals(DueStatus.RENEWAL_OVERDUE, ReminderEngine.computeOne(recurringItem(d), today)!!.status)
+        }
+    }
+
+    /** 文案必须与"东西过期了"区分开：订阅没有"检查还能不能用"这回事 */
+    @Test fun `recurring overdue has its own label`() {
+        assertEquals("续费逾期", DueStatus.RENEWAL_OVERDUE.labelZh)
+        assertEquals("逾 5 天", daysCaption(-5))
+    }
+
+    /** 环上显示逾期天数并走满弧，与其它逾期同形 */
+    @Test fun `recurring overdue ring shows days lapsed at full arc`() {
+        val spec = ringSpec(DueStatus.RENEWAL_OVERDUE, 0, 12, listOf(3, 0))
+        assertEquals("12", spec.text)
+        assertEquals(1f, spec.fraction, 0.001f)
+    }
+
+    /** 每个状态在 今日屏 都有下落。引擎加了新状态却没安排分组，就会像 RENEWAL_OVERDUE 一样静默失踪 */
+    @Test fun everyStatusHasAPlaceOnTheTodayScreen() {
+        assertEquals(TodayGroup.URGENT, DueStatus.OVERDUE.todayGroup())
+        assertEquals(TodayGroup.URGENT, DueStatus.DUE_TODAY.todayGroup())
+        assertEquals(TodayGroup.URGENT, DueStatus.RENEWAL_OVERDUE.todayGroup())
+        assertEquals(TodayGroup.ATTENTION, DueStatus.RENEWAL_TODAY.todayGroup())
+        assertEquals(TodayGroup.ATTENTION, DueStatus.LOW_STOCK.todayGroup())
+        assertEquals(TodayGroup.SOON_ONLY, DueStatus.DUE_SOON.todayGroup())
+        assertEquals(TodayGroup.SOON_ONLY, DueStatus.RENEWAL_SOON.todayGroup())
+    }
+
+    /** 静音手段与别的状态一致：今天不再提醒 / 稍后 3 天都得管用 */
+    @Test fun `recurring overdue respects handled and snooze`() {
+        val handled = recurringItem(-2).copy(handledAtEpochDay = epoch, handledStatus = DueStatus.RENEWAL_OVERDUE.name)
+        assertNull(ReminderEngine.computeOne(handled, today))
+        val snoozed = recurringItem(-2).copy(snoozedUntilEpochDay = epoch + 2)
+        assertNull(ReminderEngine.computeOne(snoozed, today))
     }
 
     @Test fun `deleted items never fire`() {
@@ -116,5 +178,94 @@ class ReminderEngineTest {
         )
         val r = ReminderEngine.computeOne(item, today)!!
         assertEquals(DueStatus.DUE_TODAY, r.status)
+    }
+
+    // ---- A4 到期环显示规格：逾期与「今天到期」「还剩 N 天」必须一眼可分 ----
+
+    @Test fun overdueRingShowsDaysOverdueAndFullArc() {
+        val spec = ringSpec(DueStatus.OVERDUE, daysLeft = 0, overdueDays = 3, offsets = listOf(3, 0))
+        assertEquals("3", spec.text)
+        assertEquals(1f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun longOverdueStaysReadableInsteadOfZero() {
+        val spec = ringSpec(DueStatus.OVERDUE, daysLeft = 0, overdueDays = 200, offsets = listOf(3, 0))
+        assertEquals("200", spec.text)
+    }
+
+    @Test fun dueTodayRingIsNotConfusableWithOverdue() {
+        val spec = ringSpec(DueStatus.DUE_TODAY, daysLeft = 0, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("今", spec.text)
+        assertEquals(0f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun renewalTodayRingAlsoReadsToday() {
+        assertEquals("今", ringSpec(DueStatus.RENEWAL_TODAY, daysLeft = 0, overdueDays = 0, offsets = listOf(3, 0)).text)
+    }
+
+    @Test fun futureRingCountsDownWithinWindow() {
+        val spec = ringSpec(DueStatus.DUE_SOON, daysLeft = 7, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("7", spec.text)
+        assertEquals(0.5f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun ringWindowFollowsLongOffsetsInsteadOfPinningFull() {
+        val spec = ringSpec(DueStatus.DUE_SOON, daysLeft = 45, overdueDays = 0, offsets = listOf(60, 30))
+        assertEquals(0.75f, spec.fraction, 0.0001f)
+    }
+
+    @Test fun lowStockRingShowsPlaceholderWithoutNumber() {
+        val spec = ringSpec(DueStatus.LOW_STOCK, daysLeft = null, overdueDays = 0, offsets = listOf(3, 0))
+        assertEquals("·", spec.text)
+        assertEquals(0f, spec.fraction, 0.0001f)
+    }
+
+    // ---- A6 今日「即将到期」与 hero「两周内」必须同口径 ----
+
+    @Test fun soonSectionCoversWholeHorizonNotOnlyOffsetDays() {
+        val at1 = expiryItem(1, listOf(3, 0))
+        val at10 = expiryItem(10, listOf(3, 0))
+        val soon = ReminderEngine.soonSection(listOf(at10 to 10L, at1 to 1L), withinDays = 14)
+        assertEquals(listOf(1L, 10L), soon.map { it.second })
+    }
+
+    @Test fun soonSectionExcludesTodayAndBeyondWindow() {
+        val todayItem = expiryItem(0, listOf(0))
+        val overdue = expiryItem(-2, listOf(3, 0))
+        val far = expiryItem(30, listOf(3, 0))
+        val soon = ReminderEngine.soonSection(
+            listOf(far to 30L, overdue to -2L, todayItem to 0L), withinDays = 14,
+        )
+        assertTrue(soon.isEmpty())
+    }
+
+    // ---- A5 清单尾部相对天数文案（替代光秃秃的「—」） ----
+
+    @Test fun daysCaptionNamesTheActualDistance() {
+        assertEquals("逾 3 天", daysCaption(-3))
+        assertEquals("今天", daysCaption(0))
+        assertEquals("剩 6 天", daysCaption(6))
+    }
+
+    @Test fun dueDayFollowsReminderKind() {
+        val expiry = expiryItem(5, listOf(3, 0))
+        assertEquals(epoch + 5, ReminderEngine.dueDayOf(expiry))
+        val recurring = Item(id = "r9", name = "视频会员", categoryId = "subscription",
+            reminderKind = ReminderKind.RECURRING, nextDueAtEpochDay = epoch + 2, reminderOffsetsDays = listOf(3, 0))
+        assertEquals(epoch + 2, ReminderEngine.dueDayOf(recurring))
+        val consumable = Item(id = "c9", name = "猫粮", categoryId = "pet",
+            reminderKind = ReminderKind.CONSUMABLE, quantity = 1.2, lowStockThreshold = 2.0)
+        assertNull(ReminderEngine.dueDayOf(consumable))
+    }
+
+    // ---- 4a 日期显示统一：本年省年份，跨年必须带年份 ----
+
+    @Test fun dateZhDropsTheYearWithinThisYear() {
+        assertEquals("9月20日", dateZh(LocalDate.of(2026, 9, 20), today))
+    }
+
+    @Test fun dateZhKeepsTheYearAcrossYears() {
+        assertEquals("2027年1月5日", dateZh(LocalDate.of(2027, 1, 5), today))
+        assertEquals("2025年12月31日", dateZh(LocalDate.of(2025, 12, 31), today))
     }
 }

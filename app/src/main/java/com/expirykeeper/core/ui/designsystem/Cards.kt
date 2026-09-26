@@ -5,12 +5,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -39,11 +40,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.domain.DueStatus
+import com.expirykeeper.core.domain.RingSpec
 
 /** 状态色对：容器色 + 内容色（取代 Pair，字段名自解释） */
 data class Tone(val container: Color, val content: Color)
@@ -51,7 +54,7 @@ data class Tone(val container: Color, val content: Color)
 /** DueStatus → M3 容器/内容色映射，全应用状态配色的唯一来源 */
 @Composable
 fun StatusTone(status: DueStatus): Tone = when (status) {
-    DueStatus.OVERDUE, DueStatus.DUE_TODAY ->
+    DueStatus.OVERDUE, DueStatus.DUE_TODAY, DueStatus.RENEWAL_OVERDUE ->
         Tone(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
     DueStatus.DUE_SOON, DueStatus.RENEWAL_SOON ->
         Tone(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
@@ -61,10 +64,56 @@ fun StatusTone(status: DueStatus): Tone = when (status) {
         Tone(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
 }
 
-/** 大圆角胶囊状态标签 */
+/** 中性 tone：无状态语义的容器/内容色对（此前各处手写 surfaceVariant + onSurfaceVariant） */
 @Composable
-fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) {
-    val tone = StatusTone(status)
+fun NeutralTone(): Tone = Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+
+/**
+ * 全应用卡片容器唯一实现：large 圆角 + tonal 表面，**不叠阴影**（M3 里 filled 容器与阴影
+ * 是两种抬升信号，同时用会互相抵消）。此前 ItemCard/FormCard/SettingsCard/HeroCard 各抄一份。
+ * 传 title 即得「分区卡」；不传即得纯容器。
+ */
+@Composable
+fun EkCard(
+    title: String?,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        if (title != null) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+/** 键值行：标签列定宽对齐，值列吃剩余宽度（DetailSheet.KvRow 与设置页.KvLine 的合并） */
+@Composable
+fun KeyValueRow(label: String, value: String, modifier: Modifier = Modifier, labelWidth: Dp = 104.dp) {
+    Row(modifier.fillMaxWidth()) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(labelWidth),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 状态胶囊：容器底 + 居中短文本。StatusPill / 中性胶囊共用这一份 */
+@Composable
+fun Pill(tone: Tone, label: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .background(tone.container, RoundedCornerShape(50))
@@ -78,15 +127,25 @@ fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) 
     }
 }
 
+/** 大圆角胶囊状态标签 */
+@Composable
+fun StatusPill(status: DueStatus, label: String, modifier: Modifier = Modifier) {
+    Pill(StatusTone(status), label, modifier)
+}
+
 /**
- * 到期环：14 天满环 → 0 天空环。Canvas 只画弧，中心数字用 Box 叠层 Text；
- * daysLeft == null 渲染居中 "·" 占位（LOW_STOCK 等无天数场景）。
+ * 到期环：只渲染 `ringSpec` 算出的文本与弧，配色跟随状态 tone。
+ * 修 A4：此前恒用 primary + daysLeft/14，逾期与「今天到期」长得一模一样。
+ * 文本超过两位时降字号，避免 44dp 圆内裁字（如逾期 200 天）。
  */
 @Composable
-fun DueRing(daysLeft: Long?, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+fun DueRing(spec: RingSpec, tone: Tone, modifier: Modifier = Modifier, size: Dp = 44.dp) {
     val track = MaterialTheme.colorScheme.surfaceVariant
-    val progress = MaterialTheme.colorScheme.primary
-    val dotColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val textStyle = if (spec.text.length <= 2) {
+        MaterialTheme.typography.headlineSmall
+    } else {
+        MaterialTheme.typography.labelLarge
+    }
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(size)) {
             // 注意：此处 size 被 DrawScope.size 遮蔽，取 Dp 参数用外层 ringPx
@@ -99,61 +158,46 @@ fun DueRing(daysLeft: Long?, size: Dp = 44.dp, modifier: Modifier = Modifier) {
                 topLeft = topLeft, size = arcSize,
                 style = Stroke(width = strokeW, cap = StrokeCap.Round),
             )
-            if (daysLeft != null) {
-                val fraction = daysLeft.coerceIn(0L, 14L) / 14f
+            if (spec.fraction > 0f) {
                 drawArc(
-                    color = progress, startAngle = -90f, sweepAngle = 360f * fraction,
+                    color = tone.content, startAngle = -90f, sweepAngle = 360f * spec.fraction,
                     useCenter = false, topLeft = topLeft, size = arcSize,
                     style = Stroke(width = strokeW, cap = StrokeCap.Round),
                 )
             }
         }
-        Text(
-            text = daysLeft?.toString() ?: "·",
-            style = MaterialTheme.typography.headlineSmall,
-            color = if (daysLeft == null) dotColor else MaterialTheme.colorScheme.onSurface,
-        )
+        Text(spec.text, style = textStyle, color = tone.content)
     }
 }
 
 /**
- * 清单/今日通用条目卡：large 圆角 + surfaceContainer + 按压 scale 1→0.97 动画；
- * leading 44dp 圆形 tone 底 emoji 文本（26sp），trailing 槽放 StatusPill / DueRing 等。
+ * 清单/今日通用条目卡：large 圆角 + surfaceContainerHigh，靠 tonal 分层而不加阴影
+ * （M3 里 filled 容器与阴影是两种抬升信号，同时用会互相抵消，修 B1）；按压 scale 1→0.97；
+ * leading 44dp 圆形 tone 底 emoji，trailing 槽放 StatusPill / DueRing。
  */
 @Composable
 fun ItemCard(
     item: Item,
     icon: String,
     tone: Tone,
-    onClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    /** 副标题覆盖：不传则回退 位置/备注 */
+    detail: String? = null,
     trailing: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "itemCardPress")
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(scale),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        val clickModifier = when {
-            onLongClick != null -> Modifier.combinedClickable(
-                interactionSource = interactionSource,
-                indication = ripple(),
-                onClick = onClick ?: {},
-                onLongClick = onLongClick,
-            )
-            onClick != null -> Modifier.clickable(
+    EkCard(title = null, modifier = modifier.scale(scale)) {
+        val clickModifier = if (onClick != null) {
+            Modifier.clickable(
                 interactionSource = interactionSource,
                 indication = ripple(),
                 onClick = onClick,
             )
-            else -> Modifier
+        } else {
+            Modifier
         }
         Row(
             modifier = clickModifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -171,17 +215,18 @@ fun ItemCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                val subtitle = item.location ?: item.note
+                val subtitle = detail ?: (item.location ?: item.note)
                 if (subtitle != null) {
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -226,6 +271,7 @@ fun EmojiRow(
                         color = MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(50),
                     )
+                    .minimumInteractiveComponentSize()
                     .clickable { onSelect(emoji) }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,

@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,7 @@ import com.expirykeeper.core.data.Categories
 import com.expirykeeper.core.data.CategoryPreset
 import com.expirykeeper.core.data.Item
 import com.expirykeeper.core.data.ItemSort
+import com.expirykeeper.core.domain.daysCaption
 import com.expirykeeper.core.domain.labelZh
 import com.expirykeeper.core.domain.ReminderEngine
 import com.expirykeeper.core.ui.designsystem.BigHeader
@@ -50,8 +54,10 @@ import java.time.LocalDate
 @Composable
 fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     val visible by vm.visibleItems.collectAsStateWithLifecycle()
+    val total by vm.items.collectAsStateWithLifecycle()
     val query by vm.filterQuery.collectAsStateWithLifecycle()
     val sort by vm.sortOrder.collectAsStateWithLifecycle()
+    val loading by vm.isLoading.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val today = LocalDate.now()
@@ -62,7 +68,8 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
     ) {
         BigHeader(
             title = "清单",
-            subtitle = "${visible.size} 件",
+            // 搜索时保留总数语境，否则「0 件」会让人以为东西没了（修 B12）
+            subtitle = if (query.isBlank()) "${visible.size} 件" else "${visible.size} / ${total.size} 件",
             actions = {
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
@@ -73,7 +80,7 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
                             DropdownMenuItem(
                                 text = { Text(option.label) },
                                 onClick = {
-                                    vm.sortOrder.value = option
+                                    vm.setSortOrder(option)
                                     menuOpen = false
                                 },
                                 trailingIcon = if (option == sort) {
@@ -91,36 +98,55 @@ fun ListScreen(vm: ItemsViewModel, onDetail: (String) -> Unit) {
         // 会把已过滤出的结果盖住（SearchBar 收起态还会把状态栏 inset 再垫一遍）
         SearchBarDefaults.InputField(
             query = query,
-            onQueryChange = { vm.filterQuery.value = it },
+            onQueryChange = { vm.setFilterQuery(it) },
             onSearch = { focusManager.clearFocus() },
             expanded = false,
             onExpandedChange = {},
             placeholder = { Text("搜索名称 / 备注 / 位置") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = if (query.isEmpty()) {
+                null
+            } else {
+                {
+                    IconButton(onClick = { vm.setFilterQuery("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "清空搜索")
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (visible.isEmpty()) {
-                item {
-                    if (query.isNotBlank()) {
-                        EmptyState("🔍", "没有找到匹配的物品", "换个关键词试试")
-                    } else {
-                        EmptyState("📦", "还没有物品", "点右下角 ➕ 添加第一件")
-                    }
+        if (visible.isEmpty() && !loading) {
+            // 空态占满剩余空间居中，而不是顶在搜索框下面留一屏空白（修 B12）
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (query.isNotBlank()) {
+                    EmptyState("🔍", "没有找到匹配的物品", "换个关键词，或清空搜索框")
+                } else {
+                    EmptyState("📦", "还没有物品", "点右下角 ➕ 添加第一件")
                 }
-            } else if (sort == ItemSort.CATEGORY) {
-                groupedCategories(visible).forEach { (rawId, cat, list) ->
-                    item(key = "group-$rawId") { SectionHeader("${cat.emoji} ${cat.name}", list.size) }
-                    items(list, key = { it.id }) { item ->
-                        ListRow(item = item, onDetail = onDetail, today = today)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (sort == ItemSort.CATEGORY) {
+                    groupedCategories(visible).forEach { (rawId, cat, list) ->
+                        item(key = "group-$rawId") {
+                            SectionHeader(
+                                "${cat.emoji} ${cat.name}",
+                                count = list.size,
+                                modifier = Modifier.animateItem().padding(top = 16.dp),
+                            )
+                        }
+                        items(list, key = { it.id }) { item ->
+                            ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
+                        }
                     }
-                }
-            } else {
-                items(visible, key = { it.id }) { item ->
-                    ListRow(item = item, onDetail = onDetail, today = today)
+                } else {
+                    items(visible, key = { it.id }) { item ->
+                        ListRow(item = item, onDetail = onDetail, today = today, modifier = Modifier.animateItem())
+                    }
                 }
             }
         }
@@ -140,11 +166,17 @@ private fun groupedCategories(
     return known + unknown
 }
 
-/** 单行卡：状态胶囊（有提醒）或数量文本（无提醒）；点击/长按 → 详情浮层（Task 11） */
+/** 单行卡：尾部只说「到期」这一件事，数量进副标题（修 A5：不再混用状态胶囊与光秃「—」） */
 @Composable
-private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
+private fun ListRow(
+    item: Item,
+    onDetail: (String) -> Unit,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
     val cat = Categories.default(item.categoryId)
     val reminder = ReminderEngine.computeOne(item, today)
+    val expireDay = ReminderEngine.dueDayOf(item)
     ItemCard(
         item = item,
         icon = ReminderEngine.displayIcon(item, cat.emoji),
@@ -153,14 +185,18 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
         } else {
             Tone(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         },
+        // 字段之间用 " / "，把「·」留给品类名的层级（修 B11）
+        detail = listOfNotNull(
+            item.location ?: item.note,
+            quantityLabel(item),
+        ).joinToString(" / ").takeIf { it.isNotEmpty() },
+        modifier = modifier,
         onClick = { onDetail(item.id) },
-        onLongClick = { onDetail(item.id) },
     ) {
-        if (reminder != null) {
-            StatusPill(reminder.status, reminder.status.labelZh)
-        } else {
-            Text(
-                quantityText(item),
+        when {
+            reminder != null -> StatusPill(reminder.status, reminder.status.labelZh)
+            expireDay != null -> Text(
+                daysCaption(expireDay - today.toEpochDay()),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -168,10 +204,11 @@ private fun ListRow(item: Item, onDetail: (String) -> Unit, today: LocalDate) {
     }
 }
 
-private fun quantityText(item: Item): String {
-    val q = item.quantity ?: return "—"
+/** 数量 + 单位；无库存语义返回 null，交由副标题合并展示 */
+private fun quantityLabel(item: Item): String? {
+    val q = item.quantity ?: return null
     val num = if (q % 1.0 == 0.0) q.toInt().toString() else q.toString()
-    return "$num ${item.unit ?: ""}".trim()
+    return "$num ${item.unit ?: ""}".trim().takeIf { it.isNotEmpty() }
 }
 
 private val ItemSort.label: String

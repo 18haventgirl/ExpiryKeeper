@@ -18,8 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.expirykeeper.core.domain.ExpiryFormMode
+import com.expirykeeper.core.domain.dateZh
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /**
  * 到期规则各 reminderKind 的分支 UI（AddEditScreen 段3，拆文件遵循 CODESTYLE §300 行）。
@@ -83,7 +83,7 @@ fun ColumnScope.ExpiryRuleSection(
         val preview = openedDate?.plusDays((shelfLife ?: 0).toLong())
         AnimatedVisibility(visible = openedDate != null && shelfLife != null) {
             Text(
-                "预计 ${preview?.format(DateTimeFormatter.ISO_LOCAL_DATE)} 到期",
+                "预计 ${preview?.let { dateZh(it, LocalDate.now()) }} 到期",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
